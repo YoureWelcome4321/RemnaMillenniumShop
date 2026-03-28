@@ -18,6 +18,7 @@ from bot.keyboards.inline.user_keyboards import (
 from bot.services.subscription_service import SubscriptionService
 from bot.services.panel_api_service import PanelApiService
 from bot.middlewares.i18n import JsonI18n
+from bot.utils.screen_media import send_screen
 from db.dal import subscription_dal, user_billing_dal
 from db.models import Subscription
 
@@ -122,17 +123,14 @@ async def display_subscription_options(
                 logging.debug("Suppressed exception in bot/handlers/user/subscription/core.py: %s", exc)
         return
 
-    if isinstance(event, types.CallbackQuery):
-        try:
-            await target_message_obj.edit_text(text_content, reply_markup=reply_markup)
-        except Exception:
-            await target_message_obj.answer(text_content, reply_markup=reply_markup)
-        try:
-            await event.answer()
-        except Exception as exc:
-            logging.debug("Suppressed exception in bot/handlers/user/subscription/core.py: %s", exc)
-    else:
-        await target_message_obj.answer(text_content, reply_markup=reply_markup)
+    await send_screen(
+        event,
+        settings,
+        "subscribe",
+        text_content,
+        reply_markup=reply_markup,
+        is_edit=isinstance(event, types.CallbackQuery),
+    )
 
 
 @router.callback_query(F.data == "main_action:subscribe")
@@ -183,17 +181,14 @@ async def my_subscription_command_handler(
 
         kb = InlineKeyboardMarkup(inline_keyboard=[[buy_button], *back_markup.inline_keyboard])
 
-        if isinstance(event, types.CallbackQuery):
-            try:
-                await event.answer()
-            except Exception as exc:
-                logging.debug("Suppressed exception in bot/handlers/user/subscription/core.py: %s", exc)
-            try:
-                await event.message.edit_text(text, reply_markup=kb)
-            except Exception:
-                await event.message.answer(text, reply_markup=kb)
-        else:
-            await event.answer(text, reply_markup=kb)
+        await send_screen(
+            event,
+            settings,
+            "my_subscription",
+            text,
+            reply_markup=kb,
+            is_edit=isinstance(event, types.CallbackQuery),
+        )
         return
 
     end_date = active.get("end_date")
@@ -346,23 +341,17 @@ async def my_subscription_command_handler(
         logging.debug("Suppressed exception in bot/handlers/user/subscription/core.py: %s", exc)
     markup = InlineKeyboardMarkup(inline_keyboard=kb)
 
-    if isinstance(event, types.CallbackQuery):
-        try:
-            await event.answer()
-        except Exception as exc:
-            logging.debug("Suppressed exception in bot/handlers/user/subscription/core.py: %s", exc)
-        try:
-            await event.message.edit_text(text, reply_markup=markup, parse_mode="HTML", disable_web_page_preview=True)
-        except Exception:
-            await bot.send_message(
-                chat_id=target.chat.id,
-                text=text,
-                reply_markup=markup,
-                parse_mode="HTML",
-                disable_web_page_preview=True,
-            )
-    else:
-        await target.answer(text, reply_markup=markup, parse_mode="HTML", disable_web_page_preview=True)
+    await send_screen(
+        event,
+        settings,
+        "my_subscription",
+        text,
+        reply_markup=markup,
+        parse_mode="HTML",
+        disable_web_page_preview=True,
+        is_edit=isinstance(event, types.CallbackQuery),
+        bot=bot,
+    )
 
 
 @router.callback_query(F.data == "main_action:my_devices")
@@ -472,17 +461,14 @@ async def my_devices_command_handler(
     kb = devices_kb + kb
     markup = InlineKeyboardMarkup(inline_keyboard=kb)
 
-    if isinstance(event, types.CallbackQuery):
-        try:
-            await event.answer()
-        except Exception as exc:
-            logging.debug("Suppressed exception in bot/handlers/user/subscription/core.py: %s", exc)
-        try:
-            await event.message.edit_text(text, reply_markup=markup)
-        except Exception:
-            await event.message.answer(text, reply_markup=markup)
-    else:
-        await target.answer(text, reply_markup=markup)
+    await send_screen(
+        event,
+        settings,
+        "my_devices",
+        text,
+        reply_markup=markup,
+        is_edit=isinstance(event, types.CallbackQuery),
+    )
 
 
 @router.callback_query(F.data.startswith("disconnect_device:"))

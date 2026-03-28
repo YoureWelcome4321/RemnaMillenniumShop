@@ -227,6 +227,10 @@ class Settings(BaseSettings):
     LOGS_PAGE_SIZE: int = Field(default=10)
 
     SUBSCRIPTION_MINI_APP_URL: Optional[str] = Field(default=None)
+    SCREEN_MEDIA_DIR: str = Field(
+        default="assets/screens",
+        description="Directory with optional per-screen images for bot screens",
+    )
 
     START_COMMAND_DESCRIPTION: Optional[str] = Field(default=None)
     DISABLE_WELCOME_MESSAGE: bool = Field(default=False, description="Disable welcome message on /start command")

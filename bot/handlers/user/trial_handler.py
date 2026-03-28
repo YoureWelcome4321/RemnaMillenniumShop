@@ -15,6 +15,7 @@ from bot.keyboards.inline.user_keyboards import (
 )
 from bot.utils.config_link import prepare_config_links
 from bot.middlewares.i18n import JsonI18n
+from bot.utils.screen_media import send_screen
 from .start import send_main_menu
 
 router = Router(name="user_trial_router")
@@ -45,29 +46,29 @@ async def request_trial_confirmation_handler(
             show_trial_btn_in_menu_if_fail = True
 
     if not settings.TRIAL_ENABLED:
-        await callback.message.edit_text(
+        await send_screen(
+            callback,
+            settings,
+            "trial",
             _("trial_feature_disabled"),
             reply_markup=get_main_menu_inline_keyboard(
                 current_lang, i18n, settings, False
             ),
+            is_edit=True,
         )
-        try:
-            await callback.answer()
-        except Exception as exc:
-            logging.debug("Suppressed exception in bot/handlers/user/trial_handler.py: %s", exc)
         return
 
     if await subscription_service.has_had_any_subscription(session, user_id):
-        await callback.message.edit_text(
+        await send_screen(
+            callback,
+            settings,
+            "trial",
             _("trial_already_had_subscription_or_trial"),
             reply_markup=get_main_menu_inline_keyboard(
                 current_lang, i18n, settings, False
             ),
+            is_edit=True,
         )
-        try:
-            await callback.answer()
-        except Exception as exc:
-            logging.debug("Suppressed exception in bot/handlers/user/trial_handler.py: %s", exc)
         return
 
     # Directly activate trial without confirmation
@@ -159,11 +160,15 @@ async def request_trial_confirmation_handler(
     )
 
     try:
-        await callback.message.edit_text(
+        await send_screen(
+            callback,
+            settings,
+            "trial",
             final_message_text_in_chat,
             parse_mode="HTML",
             reply_markup=reply_markup,
             disable_web_page_preview=True,
+            is_edit=True,
         )
     except Exception as e_edit:
         logging.warning(

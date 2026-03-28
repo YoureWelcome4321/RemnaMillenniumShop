@@ -24,6 +24,7 @@ from bot.services.promo_code_service import PromoCodeService
 from config.settings import Settings
 from bot.middlewares.i18n import JsonI18n
 from bot.utils.text_sanitizer import sanitize_username, sanitize_display_name
+from bot.utils.screen_media import send_screen
 
 router = Router(name="user_start_router")
 
@@ -94,16 +95,14 @@ async def send_main_menu(target_event: Union[types.Message,
         return
 
     try:
-        if is_edit:
-            await target_message_obj.edit_text(text, reply_markup=reply_markup)
-        else:
-            await target_message_obj.answer(text, reply_markup=reply_markup)
-
-        if isinstance(target_event, types.CallbackQuery):
-            try:
-                await target_event.answer()
-            except Exception as exc:
-                logging.debug("Suppressed exception in bot/handlers/user/start.py: %s", exc)
+        await send_screen(
+            target_event,
+            settings,
+            "main_menu",
+            text,
+            reply_markup=reply_markup,
+            is_edit=is_edit,
+        )
     except Exception as e_send_edit:
         logging.warning(
             f"Failed to send/edit main menu (user: {user_id}, is_edit: {is_edit}): {type(e_send_edit).__name__} - {e_send_edit}."
