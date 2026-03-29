@@ -63,20 +63,23 @@ async def send_screen(
     try:
         media = FSInputFile(media_path)
         if len(text) <= MAX_CAPTION_LENGTH:
-            await target_message.answer_photo(
-                photo=media,
-                caption=text,
-                parse_mode=parse_mode,
-                reply_markup=reply_markup,
-            )
+            photo_kwargs = {
+                "photo": media,
+                "caption": text,
+                "reply_markup": reply_markup,
+            }
+            if parse_mode is not None:
+                photo_kwargs["parse_mode"] = parse_mode
+            await target_message.answer_photo(**photo_kwargs)
         else:
             await target_message.answer_photo(photo=media)
-            await target_message.answer(
-                text,
-                parse_mode=parse_mode,
-                reply_markup=reply_markup,
-                disable_web_page_preview=disable_web_page_preview,
-            )
+            text_kwargs = {
+                "reply_markup": reply_markup,
+                "disable_web_page_preview": disable_web_page_preview,
+            }
+            if parse_mode is not None:
+                text_kwargs["parse_mode"] = parse_mode
+            await target_message.answer(text, **text_kwargs)
     finally:
         if isinstance(event, types.CallbackQuery):
             try:
@@ -97,28 +100,32 @@ async def _send_text(
 ) -> None:
     if isinstance(event, types.CallbackQuery) and is_edit:
         try:
-            await target_message.edit_text(
-                text,
-                reply_markup=reply_markup,
-                parse_mode=parse_mode,
-                disable_web_page_preview=disable_web_page_preview,
-            )
+            edit_kwargs = {
+                "reply_markup": reply_markup,
+                "disable_web_page_preview": disable_web_page_preview,
+            }
+            if parse_mode is not None:
+                edit_kwargs["parse_mode"] = parse_mode
+            await target_message.edit_text(text, **edit_kwargs)
         except Exception:
             if bot:
-                await bot.send_message(
-                    chat_id=target_message.chat.id,
-                    text=text,
-                    reply_markup=reply_markup,
-                    parse_mode=parse_mode,
-                    disable_web_page_preview=disable_web_page_preview,
-                )
+                send_kwargs = {
+                    "chat_id": target_message.chat.id,
+                    "text": text,
+                    "reply_markup": reply_markup,
+                    "disable_web_page_preview": disable_web_page_preview,
+                }
+                if parse_mode is not None:
+                    send_kwargs["parse_mode"] = parse_mode
+                await bot.send_message(**send_kwargs)
             else:
-                await target_message.answer(
-                    text,
-                    reply_markup=reply_markup,
-                    parse_mode=parse_mode,
-                    disable_web_page_preview=disable_web_page_preview,
-                )
+                answer_kwargs = {
+                    "reply_markup": reply_markup,
+                    "disable_web_page_preview": disable_web_page_preview,
+                }
+                if parse_mode is not None:
+                    answer_kwargs["parse_mode"] = parse_mode
+                await target_message.answer(text, **answer_kwargs)
         finally:
             try:
                 await event.answer()
@@ -126,12 +133,13 @@ async def _send_text(
                 logging.debug("Suppressed exception in bot/utils/screen_media.py: %s", exc)
         return
 
-    await target_message.answer(
-        text,
-        reply_markup=reply_markup,
-        parse_mode=parse_mode,
-        disable_web_page_preview=disable_web_page_preview,
-    )
+    answer_kwargs = {
+        "reply_markup": reply_markup,
+        "disable_web_page_preview": disable_web_page_preview,
+    }
+    if parse_mode is not None:
+        answer_kwargs["parse_mode"] = parse_mode
+    await target_message.answer(text, **answer_kwargs)
     if isinstance(event, types.CallbackQuery):
         try:
             await event.answer()
