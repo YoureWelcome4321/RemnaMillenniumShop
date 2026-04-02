@@ -2,7 +2,7 @@ import logging
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import BalanceTransaction, ReferralSetting, User, WithdrawalRequest
@@ -216,7 +216,8 @@ async def create_withdrawal_request(
         return None
 
     balance = float(user.balance_rub or 0.0)
-    if balance + 1e-9 < float(amount_rub):
+    withdrawable_balance = await get_withdrawable_referral_balance(session, user_id)
+    if balance + 1e-9 < float(amount_rub) or withdrawable_balance + 1e-9 < float(amount_rub):
         return None
 
     user.balance_rub = balance - float(amount_rub)
@@ -241,6 +242,29 @@ async def create_withdrawal_request(
     await session.flush()
     await session.refresh(request)
     return request
+
+
+async def get_withdrawable_referral_balance(
+    session: AsyncSession,
+    user_id: int,
+) -> float:
+    user = await session.get(User, user_id)
+    if not user:
+        return 0.0
+
+    withdrawn_stmt = select(
+        func.coalesce(func.sum(WithdrawalRequest.amount_rub), 0.0)
+    ).where(
+        WithdrawalRequest.user_id == user_id,
+        WithdrawalRequest.status.in_(("pending", "approved")),
+    )
+    withdrawn_result = await session.execute(withdrawn_stmt)
+    reserved_or_paid = float(withdrawn_result.scalar() or 0.0)
+
+    total_referral_earned = float(user.referral_total_earned_rub or 0.0)
+    current_balance = float(user.balance_rub or 0.0)
+    withdrawable = max(0.0, total_referral_earned - reserved_or_paid)
+    return min(current_balance, withdrawable)
 
 
 async def get_withdrawal_request(

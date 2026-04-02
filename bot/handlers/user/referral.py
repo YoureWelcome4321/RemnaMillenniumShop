@@ -86,6 +86,10 @@ async def referral_command_handler(event: Union[types.Message,
         return
 
     referral_stats = await referral_service.get_referral_stats(session, inviter_user_id)
+    withdrawable_balance = await referral_finance_dal.get_withdrawable_referral_balance(
+        session,
+        inviter_user_id,
+    )
     recent_transactions = await referral_finance_dal.get_recent_balance_transactions(
         session,
         inviter_user_id,
@@ -106,6 +110,7 @@ async def referral_command_handler(event: Union[types.Message,
              referral_link=referral_link,
              commission_percent=referral_stats["commission_percent"],
              balance_rub=referral_stats["balance_rub"],
+             withdrawable_rub=withdrawable_balance,
              total_earned_rub=referral_stats["referral_total_earned_rub"],
              balance_history=history_text,
              invited_count=referral_stats["invited_count"],
