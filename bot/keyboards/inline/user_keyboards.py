@@ -9,8 +9,7 @@ def get_main_menu_inline_keyboard(
         lang: str,
         i18n_instance,
         settings: Settings,
-        show_trial_button: bool = False,
-        balance_button_text: Optional[str] = None) -> InlineKeyboardMarkup:
+        show_trial_button: bool = False) -> InlineKeyboardMarkup:
     _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
     builder = InlineKeyboardBuilder()
 
@@ -22,13 +21,6 @@ def get_main_menu_inline_keyboard(
     builder.row(
         InlineKeyboardButton(text=_(key="menu_subscribe_inline"),
                              callback_data="main_action:subscribe"))
-    if balance_button_text:
-        builder.row(
-            InlineKeyboardButton(
-                text=balance_button_text,
-                callback_data="main_action:referral",
-            )
-        )
     builder.row(
         InlineKeyboardButton(
             text=_(key="menu_my_subscription_inline"),
@@ -47,30 +39,62 @@ def get_main_menu_inline_keyboard(
     else:
         builder.row(promo_button)
 
-    language_button = InlineKeyboardButton(
-        text=_(key="menu_language_settings_inline"),
-        callback_data="main_action:language")
     status_button_list = []
     if settings.SERVER_STATUS_URL:
         status_button_list.append(
             InlineKeyboardButton(text=_(key="menu_server_status_button"),
                                  url=settings.SERVER_STATUS_URL))
 
+    builder.row(
+        InlineKeyboardButton(
+            text=_(key="menu_additional_inline"),
+            callback_data="main_action:additional",
+        )
+    )
+
     if status_button_list:
-        builder.row(language_button, *status_button_list)
-    else:
-        builder.row(language_button)
+        builder.row(*status_button_list)
+
+    return builder.as_markup()
+
+
+def get_additional_menu_keyboard(
+    lang: str,
+    i18n_instance,
+    settings: Settings,
+) -> InlineKeyboardMarkup:
+    _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
+    builder = InlineKeyboardBuilder()
+
+    builder.row(
+        InlineKeyboardButton(
+            text=_(key="menu_language_settings_inline"),
+            callback_data="main_action:language",
+        )
+    )
 
     if settings.SUPPORT_LINK:
         builder.row(
-            InlineKeyboardButton(text=_(key="menu_support_button"),
-                                 url=settings.SUPPORT_LINK))
+            InlineKeyboardButton(
+                text=_(key="menu_support_button"),
+                url=settings.SUPPORT_LINK,
+            )
+        )
 
     if settings.TERMS_OF_SERVICE_URL:
         builder.row(
-            InlineKeyboardButton(text=_(key="menu_terms_button"),
-                                 url=settings.TERMS_OF_SERVICE_URL))
+            InlineKeyboardButton(
+                text=_(key="menu_terms_button"),
+                url=settings.TERMS_OF_SERVICE_URL,
+            )
+        )
 
+    builder.row(
+        InlineKeyboardButton(
+            text=_(key="back_to_main_menu_button"),
+            callback_data="main_action:back_to_main",
+        )
+    )
     return builder.as_markup()
 
 

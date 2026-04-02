@@ -16,6 +16,7 @@ from bot.keyboards.inline.user_keyboards import (
     get_main_menu_inline_keyboard,
     get_language_selection_keyboard,
     get_channel_subscription_keyboard,
+    get_additional_menu_keyboard,
 )
 from bot.services.subscription_service import SubscriptionService
 from bot.services.panel_api_service import PanelApiService
@@ -81,10 +82,8 @@ async def send_main_menu(target_event: Union[types.Message,
         f"{text}\n\n"
         f"<blockquote>{_('main_menu_balance_quote', balance_rub=balance_rub)}</blockquote>"
     )
-    balance_button_text = _("menu_balance_button", balance_rub=balance_rub)
     reply_markup = get_main_menu_inline_keyboard(current_lang, i18n, settings,
-                                                 show_trial_button_in_menu,
-                                                 balance_button_text=balance_button_text)
+                                                 show_trial_button_in_menu)
 
     target_message_obj: Optional[types.Message] = None
     if isinstance(target_event, types.Message):
@@ -727,6 +726,27 @@ async def select_language_callback_handler(
                          is_edit=True)
 
 
+async def additional_menu_handler(
+    event: Union[types.Message, types.CallbackQuery],
+    settings: Settings,
+    i18n_data: dict,
+):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not i18n:
+        return
+
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
+    await send_screen(
+        event,
+        settings,
+        "main_menu",
+        _("additional_menu_title"),
+        reply_markup=get_additional_menu_keyboard(current_lang, i18n, settings),
+        is_edit=isinstance(event, types.CallbackQuery),
+    )
+
+
 @router.callback_query(F.data.startswith("main_action:"))
 async def main_action_callback_handler(
         callback: types.CallbackQuery, state: FSMContext, settings: Settings,
@@ -776,6 +796,8 @@ async def main_action_callback_handler(
     elif action == "language":
 
         await language_command_handler(callback, i18n_data, settings)
+    elif action == "additional":
+        await additional_menu_handler(callback, settings, i18n_data)
     elif action == "back_to_main":
         await send_main_menu(callback,
                              settings,
