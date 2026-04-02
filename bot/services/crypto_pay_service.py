@@ -293,6 +293,12 @@ class CryptoPayService:
                         current_payment_db_id=payment_db_id,
                         skip_if_active_before_payment=False,
                     )
+                    await referral_service.reward_referrer_for_payment(
+                        session,
+                        user_id,
+                        float(invoice.amount),
+                        payment_db_id,
+                    )
                 await session.commit()
             except Exception as e:
                 await session.rollback()

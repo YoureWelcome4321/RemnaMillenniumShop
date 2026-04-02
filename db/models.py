@@ -29,6 +29,8 @@ class User(Base):
     channel_subscription_checked_at = Column(DateTime(timezone=True),
                                              nullable=True)
     channel_subscription_verified_for = Column(BigInteger, nullable=True)
+    balance_rub = Column(Float, nullable=False, default=0.0)
+    referral_total_earned_rub = Column(Float, nullable=False, default=0.0)
 
     referrer = relationship("User", remote_side=[user_id], backref="referrals")
     subscriptions = relationship("Subscription",
@@ -48,6 +50,15 @@ class User(Base):
         "MessageLog",
         foreign_keys="MessageLog.target_user_id",
         back_populates="target_user",
+        cascade="all, delete-orphan")
+    withdrawal_requests = relationship(
+        "WithdrawalRequest",
+        back_populates="user",
+        cascade="all, delete-orphan")
+    balance_transactions = relationship(
+        "BalanceTransaction",
+        foreign_keys="BalanceTransaction.user_id",
+        back_populates="user",
         cascade="all, delete-orphan")
 
     def __repr__(self):
@@ -256,6 +267,52 @@ class MessageLog(Base):
     target_user = relationship("User",
                                foreign_keys=[target_user_id],
                                back_populates="message_logs_targeted")
+
+
+class ReferralSetting(Base):
+    __tablename__ = "referral_settings"
+
+    id = Column(Integer, primary_key=True, autoincrement=False, default=1)
+    commission_percent = Column(Integer, nullable=False, default=0)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=True)
+
+
+class WithdrawalRequest(Base):
+    __tablename__ = "withdrawal_requests"
+
+    request_id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, ForeignKey("users.user_id"), nullable=False, index=True)
+    amount_rub = Column(Float, nullable=False)
+    payment_details = Column(Text, nullable=False)
+    status = Column(String, nullable=False, default="pending", index=True)
+    admin_user_id = Column(BigInteger, ForeignKey("users.user_id"), nullable=True, index=True)
+    admin_comment = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    processed_at = Column(DateTime(timezone=True), nullable=True)
+
+    user = relationship("User", foreign_keys=[user_id], back_populates="withdrawal_requests")
+
+
+class BalanceTransaction(Base):
+    __tablename__ = "balance_transactions"
+
+    transaction_id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, ForeignKey("users.user_id"), nullable=False, index=True)
+    amount_rub = Column(Float, nullable=False)
+    currency = Column(String, nullable=False, default="RUB")
+    transaction_type = Column(String, nullable=False, index=True)
+    status = Column(String, nullable=False, default="completed", index=True)
+    description = Column(Text, nullable=True)
+    payment_id = Column(Integer, ForeignKey("payments.payment_id"), nullable=True, index=True)
+    withdrawal_request_id = Column(Integer, ForeignKey("withdrawal_requests.request_id"), nullable=True, index=True)
+    related_user_id = Column(BigInteger, ForeignKey("users.user_id"), nullable=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User", foreign_keys=[user_id], back_populates="balance_transactions")
+
+    __table_args__ = (
+        UniqueConstraint("payment_id", "transaction_type", name="uq_balance_tx_payment_type"),
+    )
 
 
 class PanelSyncStatus(Base):

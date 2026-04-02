@@ -383,6 +383,12 @@ async def process_successful_payment(session: AsyncSession, bot: Bot,
                 current_payment_db_id=payment_db_id,
                 skip_if_active_before_payment=False,
             )
+            await referral_service.reward_referrer_for_payment(
+                session,
+                user_id,
+                payment_value,
+                payment_db_id,
+            )
         applied_referee_bonus_days_from_referral: Optional[int] = None
         if referral_bonus_info and referral_bonus_info.get(
                 "referee_new_end_date"):

@@ -964,7 +964,7 @@ class SubscriptionService:
                         "language_code": sub_model.user.language_code
                         or self.settings.DEFAULT_LANGUAGE,
                         "end_date_str": sub_model.end_date.strftime("%Y-%m-%d"),
-                        "days_left": max(0, int(round(days_left))),
+                        "days_left": max(0, int(days_left)),
                         "subscription_end_date_iso_for_update": sub_model.end_date,
                     }
                 )
@@ -1098,12 +1098,18 @@ class SubscriptionService:
                     lang = subscription["language_code"]
                     first_name = subscription["first_name"]
                     user_id = subscription["user_id"]
+                    days_left = subscription.get("days_left", 1)
                     markup = get_subscribe_only_markup(lang, self.i18n)
                     _ = lambda key, **kwargs: self.i18n.gettext(lang, key, **kwargs)
+                    message_key = (
+                        "subscription_today_notification"
+                        if days_left == 0
+                        else "subscription_24h_notification"
+                    )
 
                     await self.bot.send_message(
                         user_id,
-                        _("subscription_24h_notification",
+                        _(message_key,
                           user_name=first_name,
                           end_date=end_date.strftime("%Y-%m-%d")),
                         reply_markup=markup,

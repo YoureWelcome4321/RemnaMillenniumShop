@@ -167,6 +167,11 @@ def get_payment_method_keyboard(months: int, price: float,
                 text=_("pay_with_cryptopay_button"),
                 callback_data=f"pay_crypto:{value_str}:{price}{mode_suffix}",
             )
+    if price is not None and float(price) > 0:
+        builder.button(
+            text=_("pay_with_balance_button"),
+            callback_data=f"pay_balance:{value_str}:{price}{mode_suffix}",
+        )
     builder.button(text=_(key="cancel_button"),
                    callback_data="main_action:subscribe")
     builder.adjust(1)
@@ -298,6 +303,10 @@ def get_referral_link_keyboard(lang: str,
     builder = InlineKeyboardBuilder()
     builder.button(text=_(key="referral_share_message_button"),
                    callback_data="referral_action:share_message")
+    builder.button(text=_(key="referral_buy_with_balance_button"),
+                   callback_data="main_action:subscribe")
+    builder.button(text=_(key="referral_withdraw_button"),
+                   callback_data="referral_action:withdraw")
     builder.button(text=_(key="back_to_main_menu_button"),
                    callback_data="main_action:back_to_main")
     builder.adjust(1)

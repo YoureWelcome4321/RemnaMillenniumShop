@@ -18,6 +18,8 @@ from ..models import (
     UserBilling,
     UserPaymentMethod,
     AdAttribution,
+    WithdrawalRequest,
+    BalanceTransaction,
 )
 
 REFERRAL_CODE_ALPHABET = string.ascii_uppercase + string.digits
@@ -368,6 +370,8 @@ async def delete_user_and_relations(session: AsyncSession, user_id: int) -> bool
     )
     await session.execute(delete(UserBilling).where(UserBilling.user_id == user_id))
     await session.execute(delete(AdAttribution).where(AdAttribution.user_id == user_id))
+    await session.execute(delete(BalanceTransaction).where(BalanceTransaction.user_id == user_id))
+    await session.execute(delete(WithdrawalRequest).where(WithdrawalRequest.user_id == user_id))
 
     await session.delete(user)
     await session.flush()

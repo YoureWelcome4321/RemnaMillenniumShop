@@ -1,15 +1,17 @@
 import logging
 from aiogram import Router, F, types, Bot
-from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
 from typing import Optional, Union
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config.settings import Settings
 from bot.services.referral_service import ReferralService
+from bot.states.user_states import UserReferralStates
 
 from bot.keyboards.inline.user_keyboards import get_back_to_main_menu_markup
 from bot.middlewares.i18n import JsonI18n
 from bot.utils.screen_media import send_screen
+from db.dal import referral_finance_dal
 
 router = Router(name="user_referral_router")
 
@@ -83,34 +85,29 @@ async def referral_command_handler(event: Union[types.Message,
             await event.answer()
         return
 
-    bonus_info_parts = []
-    if getattr(settings, "traffic_sale_mode", False):
-        bonus_details_str = _("referral_not_available_for_traffic")
-    else:
-        if settings.subscription_options:
-            for months_period_key, _price in sorted(
-                    settings.subscription_options.items()):
-
-                inv_bonus = settings.referral_bonus_inviter.get(months_period_key)
-                ref_bonus = settings.referral_bonus_referee.get(months_period_key)
-                if inv_bonus is not None or ref_bonus is not None:
-                    bonus_info_parts.append(
-                        _("referral_bonus_per_period",
-                          months=months_period_key,
-                          inviter_bonus_days=inv_bonus
-                          if inv_bonus is not None else _("no_bonus_placeholder"),
-                          referee_bonus_days=ref_bonus
-                          if ref_bonus is not None else _("no_bonus_placeholder")))
-
-        bonus_details_str = "\n".join(bonus_info_parts) if bonus_info_parts else _(
-            "referral_no_bonuses_configured")
-
-    # Get referral statistics
     referral_stats = await referral_service.get_referral_stats(session, inviter_user_id)
+    recent_transactions = await referral_finance_dal.get_recent_balance_transactions(
+        session,
+        inviter_user_id,
+        limit=5,
+    )
+    history_lines = []
+    for tx in recent_transactions:
+        amount_sign = "+" if tx.amount_rub >= 0 else ""
+        history_lines.append(
+            _("referral_balance_history_line",
+              amount=f"{amount_sign}{tx.amount_rub:.2f}",
+              type=tx.transaction_type,
+              status=tx.status)
+        )
+    history_text = "\n".join(history_lines) if history_lines else _("referral_balance_history_empty")
 
     text = _("referral_program_info_new",
              referral_link=referral_link,
-             bonus_details=bonus_details_str,
+             commission_percent=referral_stats["commission_percent"],
+             balance_rub=referral_stats["balance_rub"],
+             total_earned_rub=referral_stats["referral_total_earned_rub"],
+             balance_history=history_text,
              invited_count=referral_stats["invited_count"],
              purchased_count=referral_stats["purchased_count"])
 
@@ -131,7 +128,7 @@ async def referral_command_handler(event: Union[types.Message,
 @router.callback_query(F.data.startswith("referral_action:"))
 async def referral_action_handler(callback: types.CallbackQuery, settings: Settings, 
                                  i18n_data: dict, referral_service: ReferralService, 
-                                 bot: Bot, session: AsyncSession):
+                                 bot: Bot, session: AsyncSession, state: FSMContext):
     action = callback.data.split(":")[1]
     current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
     i18n = i18n_data.get("i18n_instance")
@@ -170,5 +167,50 @@ async def referral_action_handler(callback: types.CallbackQuery, settings: Setti
         except Exception as e:
             logging.error(f"Error in referral share message: {e}")
             await callback.answer("Произошла ошибка", show_alert=True)
+    elif action == "withdraw":
+        await state.set_state(UserReferralStates.waiting_for_withdraw_request)
+        await callback.message.answer(
+            _("referral_withdraw_prompt"),
+            reply_markup=get_back_to_main_menu_markup(current_lang, i18n, callback_data="main_action:referral"),
+        )
         
     await callback.answer()
+
+
+@router.message(UserReferralStates.waiting_for_withdraw_request, F.text)
+async def process_withdraw_request(
+    message: types.Message,
+    state: FSMContext,
+    settings: Settings,
+    i18n_data: dict,
+    session: AsyncSession,
+):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
+
+    raw_text = (message.text or "").strip()
+    amount_part, _, details_part = raw_text.partition("\n")
+    if not amount_part or not details_part.strip():
+        await message.answer(_("referral_withdraw_invalid_format"))
+        return
+
+    try:
+        amount_rub = round(float(amount_part.replace(",", ".")), 2)
+    except ValueError:
+        await message.answer(_("referral_withdraw_invalid_format"))
+        return
+
+    request = await referral_finance_dal.create_withdrawal_request(
+        session,
+        message.from_user.id,
+        amount_rub,
+        details_part.strip(),
+    )
+    if not request:
+        await message.answer(_("referral_withdraw_insufficient_balance"))
+        return
+
+    await session.commit()
+    await state.clear()
+    await message.answer(_("referral_withdraw_created", amount=amount_rub))

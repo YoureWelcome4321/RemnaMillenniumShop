@@ -7,7 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.keyboards.inline.user_keyboards import get_payment_method_keyboard
 from bot.middlewares.i18n import JsonI18n
+from bot.keyboards.inline.user_keyboards import get_connect_and_main_keyboard
+from bot.utils.config_link import prepare_config_links
 from config.settings import Settings
+from db.dal import payment_dal, referral_finance_dal, user_dal
 
 router = Router(name="user_subscription_payments_selection_router")
 
@@ -182,3 +185,119 @@ async def select_subscription_period_callback_handler(
         await callback.answer()
     except Exception as exc:
         logging.debug("Suppressed exception in bot/handlers/user/subscription/payments_subscription.py: %s", exc)
+
+
+@router.callback_query(F.data.startswith("pay_balance:"))
+async def pay_with_balance_callback_handler(
+    callback: types.CallbackQuery,
+    settings: Settings,
+    i18n_data: dict,
+    session: AsyncSession,
+    subscription_service,
+    promo_code_service=None,
+):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
+
+    if not i18n or not callback.message:
+        await callback.answer(_("error_occurred_try_again"), show_alert=True)
+        return
+
+    try:
+        _, months_raw, _price_raw, sale_mode = callback.data.split(":", 3)
+        months = float(months_raw)
+    except ValueError:
+        await callback.answer(_("error_try_again"), show_alert=True)
+        return
+
+    resolved_price = await resolve_fiat_offer_price_for_user(
+        session,
+        settings,
+        callback.from_user.id,
+        months,
+        sale_mode,
+        promo_code_service=promo_code_service,
+    )
+    if resolved_price is None:
+        await callback.answer(_("error_try_again"), show_alert=True)
+        return
+
+    user = await user_dal.get_user_by_id(session, callback.from_user.id)
+    balance_rub = float(getattr(user, "balance_rub", 0.0) or 0.0)
+    if balance_rub + 1e-9 < float(resolved_price):
+        await callback.answer(
+            _("referral_withdraw_insufficient_balance"),
+            show_alert=True,
+        )
+        return
+
+    payment = await payment_dal.create_payment_record(
+        session,
+        {
+            "user_id": callback.from_user.id,
+            "amount": float(resolved_price),
+            "currency": "RUB",
+            "status": "succeeded",
+            "description": "Balance purchase",
+            "subscription_duration_months": int(months) if sale_mode != "traffic" else 0,
+            "provider": "balance",
+        },
+    )
+    balance_tx = await referral_finance_dal.spend_balance(
+        session,
+        callback.from_user.id,
+        float(resolved_price),
+        description="Subscription purchase from balance",
+        payment_id=payment.payment_id,
+    )
+    if not balance_tx:
+        await callback.answer(_("referral_withdraw_insufficient_balance"), show_alert=True)
+        return
+
+    activation = await subscription_service.activate_subscription(
+        session=session,
+        user_id=callback.from_user.id,
+        months=int(months) if sale_mode != "traffic" else 0,
+        payment_amount=float(resolved_price),
+        payment_db_id=payment.payment_id,
+        provider="balance",
+        sale_mode=sale_mode,
+        traffic_gb=months if sale_mode == "traffic" else None,
+    )
+    if not activation or not activation.get("end_date"):
+        await session.rollback()
+        await callback.answer(_("error_try_again"), show_alert=True)
+        return
+
+    await session.commit()
+
+    raw_config_link = activation.get("subscription_url")
+    config_link_display, connect_button_url = await prepare_config_links(settings, raw_config_link)
+    config_link_text = config_link_display or _("config_link_not_available")
+    details_message = (
+        _("payment_successful_traffic_full",
+          traffic_gb=str(int(months)) if float(months).is_integer() else f"{months:g}",
+          end_date=activation["end_date"].strftime("%Y-%m-%d"),
+          config_link=config_link_text)
+        if sale_mode == "traffic"
+        else _("payment_successful_full",
+               months=int(months),
+               end_date=activation["end_date"].strftime("%Y-%m-%d"),
+               config_link=config_link_text)
+    )
+    details_markup = get_connect_and_main_keyboard(
+        current_lang,
+        i18n,
+        settings,
+        config_link_display,
+        connect_button_url=connect_button_url,
+        preserve_message=True,
+    )
+    await callback.message.answer(
+        details_message,
+        reply_markup=details_markup,
+        parse_mode="HTML",
+        disable_web_page_preview=True,
+    )
+    await callback.answer()

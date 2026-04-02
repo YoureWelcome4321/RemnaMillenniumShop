@@ -198,6 +198,12 @@ class StarsService:
                     current_payment_db_id=payment_db_id,
                     skip_if_active_before_payment=False,
                 )
+                await self.referral_service.reward_referrer_for_payment(
+                    session,
+                    message.from_user.id,
+                    float(total_amount_rub),
+                    payment_db_id,
+                )
             await session.commit()
         except Exception as e_upd:
             await session.rollback()

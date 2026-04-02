@@ -304,8 +304,12 @@ async def format_user_card(user: User, session: AsyncSession,
                 stats = await referral_service.get_referral_stats(session, user.user_id)
                 invited_count = stats.get('invited_count', 0)
                 purchased_count = stats.get('purchased_count', 0)
+                balance_rub = stats.get('balance_rub', 0.0)
+                total_earned_rub = stats.get('referral_total_earned_rub', 0.0)
                 card_parts.append(f"{_('admin_user_invited_friends_label')} {hcode(str(invited_count))}")
                 card_parts.append(f"{_('admin_user_ref_purchased_label')} {hcode(str(purchased_count))}")
+                card_parts.append(f"{_('admin_user_balance_label')} {hcode(f'{balance_rub:.2f} RUB')}")
+                card_parts.append(f"{_('admin_user_referral_earned_label')} {hcode(f'{total_earned_rub:.2f} RUB')}")
             except Exception as e_rs:
                 logging.error(f"Failed to build referral stats for admin card {user.user_id}: {e_rs}")
         

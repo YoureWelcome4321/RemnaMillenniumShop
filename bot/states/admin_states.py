@@ -36,3 +36,6 @@ class AdminStates(StatesGroup):
     waiting_for_ad_source = State()
     waiting_for_ad_start_param = State()
     waiting_for_ad_cost = State()
+
+    # Referral finance
+    waiting_for_referral_commission_percent = State()

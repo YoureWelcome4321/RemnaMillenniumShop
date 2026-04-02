@@ -24,6 +24,7 @@ from . import user_management as admin_user_mgmnt_handlers
 from . import statistics as admin_stats_handlers
 from . import sync_admin as admin_sync_handlers
 from . import logs_admin as admin_logs_handlers
+from . import referral_admin as admin_referral_handlers
 
 router = Router(name="admin_common_router")
 
@@ -147,6 +148,14 @@ async def admin_panel_actions_callback_handler(
     elif action == "ads_create":
         from . import ads as admin_ads_handlers
         await admin_ads_handlers.ads_create_start(callback, state, settings, i18n_data)
+    elif action == "referral_settings":
+        await admin_referral_handlers.referral_settings_panel(
+            callback, settings, i18n_data, session
+        )
+    elif action == "withdraw_requests":
+        await admin_referral_handlers.list_withdraw_requests(
+            callback, settings, i18n_data, session
+        )
     elif action == "main":
         try:
             await callback.message.edit_text(

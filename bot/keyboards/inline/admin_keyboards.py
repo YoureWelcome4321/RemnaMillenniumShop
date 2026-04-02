@@ -115,9 +115,48 @@ def get_system_functions_keyboard(i18n_instance, lang: str) -> InlineKeyboardMar
                    callback_data="admin_action:sync_panel")
     builder.button(text=_(key="admin_queue_status_button"),
                    callback_data="admin_action:queue_status")
+    builder.button(text=_(key="admin_referral_settings_button"),
+                   callback_data="admin_action:referral_settings")
+    builder.button(text=_(key="admin_withdraw_requests_button"),
+                   callback_data="admin_action:withdraw_requests")
     
     builder.button(text=_(key="back_to_admin_panel_button"),
                    callback_data="admin_action:main")
+    builder.adjust(2, 2, 1)
+    return builder.as_markup()
+
+
+def get_admin_referral_settings_keyboard(
+    i18n_instance,
+    lang: str,
+) -> InlineKeyboardMarkup:
+    _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
+    builder = InlineKeyboardBuilder()
+    builder.button(text=_(key="admin_set_referral_percent_button"),
+                   callback_data="admin_referral:set_percent_prompt")
+    builder.button(text=_(key="admin_withdraw_requests_button"),
+                   callback_data="admin_action:withdraw_requests")
+    builder.button(text=_(key="back_to_system_functions_button"),
+                   callback_data="admin_section:system_functions")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def get_withdraw_request_admin_keyboard(
+    request_id: int,
+    i18n_instance,
+    lang: str,
+) -> InlineKeyboardMarkup:
+    _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
+    builder = InlineKeyboardBuilder()
+    builder.button(text=_(key="admin_withdraw_approve_button"),
+                   callback_data=f"admin_referral:withdraw:approve:{request_id}")
+    builder.button(text=_(key="admin_withdraw_reject_button"),
+                   callback_data=f"admin_referral:withdraw:reject:{request_id}")
+    builder.button(text=_(key="admin_withdraw_requests_button"),
+                   callback_data="admin_action:withdraw_requests")
+    builder.button(text=_(key="back_to_system_functions_button"),
+                   callback_data="admin_section:system_functions")
     builder.adjust(2, 1, 1)
     return builder.as_markup()
 

@@ -392,6 +392,12 @@ class FreeKassaService:
                         current_payment_db_id=payment.payment_id,
                         skip_if_active_before_payment=False,
                     )
+                    await self.referral_service.reward_referrer_for_payment(
+                        session,
+                        payment.user_id,
+                        float(payment.amount),
+                        payment.payment_id,
+                    )
 
                 await session.commit()
             except Exception as e:
