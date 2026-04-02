@@ -9,10 +9,18 @@ from config.settings import Settings
 
 SCREEN_MEDIA_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
 MAX_CAPTION_LENGTH = 1024
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _resolve_media_dir(settings: Settings) -> Path:
+    media_dir = Path(settings.SCREEN_MEDIA_DIR)
+    if media_dir.is_absolute():
+        return media_dir
+    return PROJECT_ROOT / media_dir
 
 
 def get_screen_media_path(settings: Settings, screen_key: str) -> Optional[Path]:
-    media_dir = Path(settings.SCREEN_MEDIA_DIR)
+    media_dir = _resolve_media_dir(settings)
     for extension in SCREEN_MEDIA_EXTENSIONS:
         candidate = media_dir / f"{screen_key}{extension}"
         if candidate.is_file():

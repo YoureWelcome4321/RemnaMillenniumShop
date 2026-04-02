@@ -6,12 +6,13 @@ from aiohttp import web
 from aiogram import Bot
 from aiogram.types import InlineKeyboardMarkup
 from sqlalchemy.orm import sessionmaker
+from datetime import datetime, timezone
 from typing import Optional
 from config.settings import Settings
 from .panel_api_service import PanelApiService
 from bot.middlewares.i18n import JsonI18n
 from bot.keyboards.inline.user_keyboards import get_subscribe_only_markup, get_autorenew_cancel_keyboard
-from db.dal import user_dal
+from db.dal import user_dal, subscription_dal
 
 EVENT_MAP = {
     "user.expires_in_72_hours": (3, "subscription_72h_notification"),
@@ -85,10 +86,27 @@ class PanelWebhookService:
                 except Exception:
                     logging.exception("Auto-renew trigger (24h) failed pre-check")
             if days_left <= self.settings.SUBSCRIPTION_NOTIFY_DAYS_BEFORE:
+                sub = None
+                async with self.async_session_factory() as session:
+                    sub = await subscription_dal.get_active_subscription_by_user_id(
+                        session, user_id
+                    )
+                    if (
+                        sub
+                        and sub.last_notification_sent
+                        and sub.last_notification_sent.date()
+                        >= datetime.now(timezone.utc).date()
+                    ):
+                        logging.info(
+                            "Skipping duplicate expiration notification for user %s, subscription %s",
+                            user_id,
+                            sub.subscription_id,
+                        )
+                        return
+
                 # For 48h event, if auto-renew is enabled, show special notice with cancel button
                 if days_left == 2:
                     async with self.async_session_factory() as session:
-                        from db.dal import subscription_dal
                         sub = await subscription_dal.get_active_subscription_by_user_id(session, user_id)
                         logging.info(
                             "48h webhook check: user_id=%s sub_found=%s auto_renew=%s provider=%s",
@@ -106,6 +124,12 @@ class PanelWebhookService:
                                 reply_markup=cancel_kb,
                                 user_name=first_name,
                             )
+                            await subscription_dal.update_subscription_notification_time(
+                                session,
+                                sub.subscription_id,
+                                datetime.now(timezone.utc),
+                            )
+                            await session.commit()
                             return
                 await self._send_message(
                     user_id,
@@ -115,6 +139,18 @@ class PanelWebhookService:
                     user_name=first_name,
                     end_date=user_payload.get("expireAt", "")[:10],
                 )
+                if sub:
+                    async with self.async_session_factory() as session:
+                        fresh_sub = await subscription_dal.get_active_subscription_by_user_id(
+                            session, user_id
+                        )
+                        if fresh_sub:
+                            await subscription_dal.update_subscription_notification_time(
+                                session,
+                                fresh_sub.subscription_id,
+                                datetime.now(timezone.utc),
+                            )
+                            await session.commit()
         elif event_name == "user.expired":
             if self.settings.SUBSCRIPTION_NOTIFY_ON_EXPIRE:
                 await self._send_message(

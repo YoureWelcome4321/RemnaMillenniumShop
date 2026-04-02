@@ -45,6 +45,29 @@ async def register_all_routers(dp: Dispatcher, settings: Settings):
     logging.info("All application routers registered.")
 
 
+async def subscription_24h_reminder_task(
+    subscription_service: SubscriptionService,
+    async_session_factory: sessionmaker,
+):
+    """Run periodic fallback reminders for subscriptions expiring within 24 hours."""
+    while True:
+        try:
+            sent_count = await subscription_service.send_24h_expiration_reminders(
+                async_session_factory
+            )
+            if sent_count:
+                logging.info(
+                    "Fallback 24h expiration reminders sent: %s",
+                    sent_count,
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logging.exception("Fallback 24h expiration reminder task failed")
+
+        await asyncio.sleep(3600)
+
+
 async def on_startup_configured(dispatcher: Dispatcher):
     bot: Bot = dispatcher["bot_instance"]
     settings: Settings = dispatcher["settings"]
@@ -302,8 +325,15 @@ async def run_bot(settings_param: Settings):
         await build_and_start_web_app(dp, bot, settings_param, local_async_session_factory)
 
     main_tasks.append(asyncio.create_task(web_server_task(), name="AIOHTTPServerTask"))
-
-    # Recurring billing moved to panel webhook (24h before expiry). No periodic task needed here.
+    main_tasks.append(
+        asyncio.create_task(
+            subscription_24h_reminder_task(
+                services["subscription_service"],
+                local_async_session_factory,
+            ),
+            name="Subscription24hReminderTask",
+        )
+    )
 
     logging.info("Starting bot in Webhook mode with AIOHTTP server...")
     logging.info(f"Starting bot with main tasks: {[task.get_name() for task in main_tasks]}")

@@ -1,9 +1,11 @@
 import logging
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import sessionmaker
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List, Tuple
 from aiogram import Bot
 from bot.middlewares.i18n import JsonI18n
+from bot.keyboards.inline.user_keyboards import get_subscribe_only_markup
 
 from db.dal import user_dal, subscription_dal, promo_code_dal, user_billing_dal, payment_dal
 from bot.utils.date_utils import add_months
@@ -1069,6 +1071,60 @@ class SubscriptionService:
             logging.warning(
                 f"Could not find subscription for user {user_id} ending at {subscription_end_date.isoformat()} to update notification time."
             )
+
+    async def send_24h_expiration_reminders(
+        self,
+        async_session_factory: sessionmaker,
+    ) -> int:
+        """Fallback reminder sender when panel webhooks are unavailable or delayed."""
+        if (
+            not self.settings.SUBSCRIPTION_NOTIFICATIONS_ENABLED
+            or not self.bot
+            or not self.i18n
+        ):
+            return 0
+
+        sent_count = 0
+        async with async_session_factory() as session:
+            subscriptions = await self.get_subscriptions_ending_soon(
+                session, days_threshold=1
+            )
+            for subscription in subscriptions:
+                end_date = subscription.get("subscription_end_date_iso_for_update")
+                if not end_date:
+                    continue
+
+                try:
+                    lang = subscription["language_code"]
+                    first_name = subscription["first_name"]
+                    user_id = subscription["user_id"]
+                    markup = get_subscribe_only_markup(lang, self.i18n)
+                    _ = lambda key, **kwargs: self.i18n.gettext(lang, key, **kwargs)
+
+                    await self.bot.send_message(
+                        user_id,
+                        _("subscription_24h_notification",
+                          user_name=first_name,
+                          end_date=end_date.strftime("%Y-%m-%d")),
+                        reply_markup=markup,
+                    )
+                    await self.update_last_notification_sent(
+                        session,
+                        user_id,
+                        end_date,
+                    )
+                    sent_count += 1
+                except Exception as exc:
+                    logging.error(
+                        "Failed to send 24h expiration reminder to user %s: %s",
+                        subscription.get("user_id"),
+                        exc,
+                    )
+
+            if sent_count:
+                await session.commit()
+
+        return sent_count
 
     # Helpers
     def _build_panel_update_payload(
