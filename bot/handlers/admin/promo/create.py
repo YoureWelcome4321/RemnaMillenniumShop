@@ -28,7 +28,7 @@ async def create_promo_prompt_handler(callback: types.CallbackQuery,
         return
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
 
-    # Step 0: Ask for promo type (bonus_days or discount)
+    # Step 0: Ask for promo type
     prompt_text = _(
         "admin_promo_step0_type"
     )
@@ -45,6 +45,12 @@ async def create_promo_prompt_handler(callback: types.CallbackQuery,
         InlineKeyboardButton(
             text=_("admin_promo_type_discount"),
             callback_data="promo_type_select:discount"
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text=_("admin_promo_type_balance_credit"),
+            callback_data="promo_type_select:balance_credit"
         )
     )
     builder.row(
@@ -142,13 +148,19 @@ async def process_promo_code_handler(message: types.Message,
         data = await state.get_data()
         promo_type = data.get("promo_type", "bonus_days")
 
-        # Step 2: Ask for bonus days OR discount percentage based on type
+        # Step 2: Ask for promo value based on type
         if promo_type == "discount":
             prompt_text = _(
                 "admin_promo_step2_discount_percentage",
                 code=code_str
             )
             next_state = AdminStates.waiting_for_promo_discount_percentage
+        elif promo_type == "balance_credit":
+            prompt_text = _(
+                "admin_promo_step2_balance_credit_rub",
+                code=code_str
+            )
+            next_state = AdminStates.waiting_for_promo_balance_credit_rub
         else:
             prompt_text = _(
                 "admin_promo_step2_bonus_days",
@@ -262,6 +274,45 @@ async def process_promo_discount_percentage_handler(message: types.Message,
         await message.answer(_("error_occurred_try_again"))
 
 
+@router.message(AdminStates.waiting_for_promo_balance_credit_rub, F.text)
+async def process_promo_balance_credit_handler(message: types.Message,
+                                               state: FSMContext,
+                                               i18n_data: dict,
+                                               settings: Settings):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not i18n:
+        await message.reply("Language service error.")
+        return
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
+
+    try:
+        balance_credit_rub = round(float(message.text.strip().replace(",", ".")), 2)
+        if balance_credit_rub <= 0:
+            await message.answer(_("admin_promo_invalid_balance_credit_rub"))
+            return
+
+        await state.update_data(balance_credit_rub=balance_credit_rub)
+        data = await state.get_data()
+        prompt_text = _(
+            "admin_promo_step3_max_activations_balance_credit",
+            code=data.get("promo_code"),
+            balance_credit_rub=f"{balance_credit_rub:.2f}",
+        )
+
+        await message.answer(
+            prompt_text,
+            reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n),
+            parse_mode="HTML"
+        )
+        await state.set_state(AdminStates.waiting_for_promo_max_activations)
+    except ValueError:
+        await message.answer(_("admin_promo_invalid_balance_credit_rub"))
+    except Exception as e:
+        logging.error(f"Error processing promo balance credit amount: {e}")
+        await message.answer(_("error_occurred_try_again"))
+
+
 # Step 3: Process max activations
 @router.message(AdminStates.waiting_for_promo_max_activations, F.text)
 async def process_promo_max_activations_handler(message: types.Message,
@@ -294,6 +345,13 @@ async def process_promo_max_activations_handler(message: types.Message,
                 "admin_promo_step4_validity_discount",
                 code=data.get("promo_code"),
                 discount_percentage=data.get("discount_percentage"),
+                max_activations=max_activations
+            )
+        elif promo_type == "balance_credit":
+            prompt_text = _(
+                "admin_promo_step4_validity_balance_credit",
+                code=data.get("promo_code"),
+                balance_credit_rub=f"{float(data.get('balance_credit_rub', 0)):.2f}",
                 max_activations=max_activations
             )
         else:
@@ -371,10 +429,15 @@ async def process_promo_set_validity(callback: types.CallbackQuery,
     # Display the correct text based on promo type
     if promo_type == "discount":
         value_info = f"{data.get('discount_percentage')}%"
+        value_label = "Скидка"
+    elif promo_type == "balance_credit":
+        value_info = f"{float(data.get('balance_credit_rub', 0)):.2f} RUB"
+        value_label = "Баланс"
     else:
         value_info = f"{data.get('bonus_days')} дней"
+        value_label = "Бонус"
 
-    prompt_text = f"⏰ Введите количество дней действия промокода (1-365):\n\nКод: <b>{data.get('promo_code')}</b>\n{'Скидка' if promo_type == 'discount' else 'Бонус'}: <b>{value_info}</b>\nМакс. активаций: <b>{data.get('max_activations')}</b>"
+    prompt_text = f"⏰ Введите количество дней действия промокода (1-365):\n\nКод: <b>{data.get('promo_code')}</b>\n{value_label}: <b>{value_info}</b>\nМакс. активаций: <b>{data.get('max_activations')}</b>"
     
     try:
         await callback.message.edit_text(
@@ -456,9 +519,15 @@ async def create_promo_code_final(callback_or_message,
         if promo_type == "discount":
             promo_data["discount_percentage"] = data["discount_percentage"]
             promo_data["bonus_days"] = None
+            promo_data["balance_credit_rub"] = None
+        elif promo_type == "balance_credit":
+            promo_data["discount_percentage"] = None
+            promo_data["bonus_days"] = None
+            promo_data["balance_credit_rub"] = data["balance_credit_rub"]
         else:
             promo_data["bonus_days"] = data["bonus_days"]
             promo_data["discount_percentage"] = None
+            promo_data["balance_credit_rub"] = None
 
         # Set validity
         if data.get("validity_days"):
@@ -482,6 +551,14 @@ async def create_promo_code_final(callback_or_message,
                 "admin_promo_created_success_discount",
                 code=data["promo_code"],
                 discount_percentage=data['discount_percentage'],
+                max_activations=data["max_activations"],
+                valid_until_str=valid_until_str
+            )
+        elif promo_type == "balance_credit":
+            success_text = _(
+                "admin_promo_created_success_balance_credit",
+                code=data["promo_code"],
+                balance_credit_rub=f"{float(data['balance_credit_rub']):.2f}",
                 max_activations=data["max_activations"],
                 valid_until_str=valid_until_str
             )
@@ -537,6 +614,7 @@ async def create_promo_code_final(callback_or_message,
         AdminStates.waiting_for_promo_type_selection,
         AdminStates.waiting_for_promo_code,
         AdminStates.waiting_for_promo_bonus_days,
+        AdminStates.waiting_for_promo_balance_credit_rub,
         AdminStates.waiting_for_promo_discount_percentage,
         AdminStates.waiting_for_promo_max_activations,
         AdminStates.waiting_for_promo_validity_days,

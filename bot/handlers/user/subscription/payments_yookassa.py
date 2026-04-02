@@ -123,6 +123,8 @@ async def _initiate_yk_payment(
     payment_description = (
         get_text("payment_description_traffic", traffic_gb=_format_value(months))
         if sale_mode == "traffic"
+        else "Balance top-up"
+        if sale_mode == "balance_topup"
         else get_text("payment_description_subscription", months=int(months))
     )
     payment_record_data = {
@@ -133,7 +135,7 @@ async def _initiate_yk_payment(
         "currency": currency_code_for_yk,
         "status": "pending_yookassa",
         "description": payment_description,
-        "subscription_duration_months": int(months),
+        "subscription_duration_months": int(months) if sale_mode != "balance_topup" else 0,
         "promo_code_id": active_promo_code_id,  # NEW: Link to promo code
     }
 
@@ -260,9 +262,10 @@ async def _initiate_yk_payment(
         try:
             await callback.message.edit_text(
                 get_text(
-                    key="payment_link_message_traffic" if sale_mode == "traffic" else "payment_link_message",
+                    key="payment_link_message_traffic" if sale_mode == "traffic" else "payment_link_message_balance_topup" if sale_mode == "balance_topup" else "payment_link_message",
                     months=int(months),
                     traffic_gb=_format_value(months),
+                    amount=f"{float(price_rub):.2f}",
                 ),
                 reply_markup=get_payment_url_keyboard(
                     payment_response_yk["confirmation_url"],
@@ -280,9 +283,10 @@ async def _initiate_yk_payment(
             try:
                 await callback.message.answer(
                     get_text(
-                        key="payment_link_message_traffic" if sale_mode == "traffic" else "payment_link_message",
+                        key="payment_link_message_traffic" if sale_mode == "traffic" else "payment_link_message_balance_topup" if sale_mode == "balance_topup" else "payment_link_message",
                         months=int(months),
                         traffic_gb=_format_value(months),
+                        amount=f"{float(price_rub):.2f}",
                     ),
                     reply_markup=get_payment_url_keyboard(
                         payment_response_yk["confirmation_url"],
@@ -510,7 +514,7 @@ async def pay_yk_callback_handler(callback: types.CallbackQuery, settings: Setti
         price_rub=price_rub,
         currency_code_for_yk=currency_code_for_yk,
         save_payment_method=autopay_enabled and autopay_require_binding,
-        back_callback=f"subscribe_period:{_format_value(months)}",
+        back_callback="main_action:referral" if sale_mode == "balance_topup" else f"subscribe_period:{_format_value(months)}",
         sale_mode=sale_mode,
     )
     try:
@@ -622,7 +626,7 @@ async def pay_yk_new_card_handler(callback: types.CallbackQuery, settings: Setti
         price_rub=price_rub,
         currency_code_for_yk=currency_code_for_yk,
         save_payment_method=autopay_enabled and autopay_require_binding,
-        back_callback=f"subscribe_period:{_format_value(months)}",
+        back_callback="main_action:referral" if sale_mode == "balance_topup" else f"subscribe_period:{_format_value(months)}",
         sale_mode=sale_mode,
     )
     try:

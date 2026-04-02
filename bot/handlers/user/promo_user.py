@@ -191,25 +191,45 @@ async def process_promo_code_input(message: types.Message, state: FSMContext,
                 )
                 reply_markup = get_back_to_main_menu_markup(current_lang, i18n)
             else:
-                # Both failed
-                await session.rollback()
-                logging.info(
-                    f"Promo code '{code_input}' application failed for user {user.id}. "
-                    f"Bonus reason: {result}. Discount reason: {result_discount}"
+                success_balance, result_balance = await promo_code_service.apply_balance_credit_promo_code(
+                    session, user.id, code_input, current_lang
                 )
-                bonus_not_found_text = _(
-                    "promo_code_not_found", code=code_input.upper()
-                )
-                discount_not_found_text = _(
-                    "promo_code_not_found_or_not_discount", code=code_input.upper()
-                )
-                if result != bonus_not_found_text and result_discount == discount_not_found_text:
-                    response_to_user_text = result
+
+                if success_balance:
+                    await session.commit()
+                    logging.info(
+                        f"Balance promo code '{code_input}' successfully applied for user {user.id}."
+                    )
+                    response_to_user_text = _(
+                        "balance_credit_promo_code_applied_success",
+                        code=hcode(code_input.upper()),
+                        amount=f"{float(result_balance):.2f}",
+                    )
+                    reply_markup = get_back_to_main_menu_markup(current_lang, i18n)
                 else:
-                    response_to_user_text = result_discount  # Prefer the discount attempt error
-                reply_markup = get_back_to_main_menu_markup(
-                    current_lang, i18n
-                )
+                    await session.rollback()
+                    logging.info(
+                        f"Promo code '{code_input}' application failed for user {user.id}. "
+                        f"Bonus reason: {result}. Discount reason: {result_discount}. Balance reason: {result_balance}"
+                    )
+                    bonus_not_found_text = _(
+                        "promo_code_not_found", code=code_input.upper()
+                    )
+                    discount_not_found_text = _(
+                        "promo_code_not_found_or_not_discount", code=code_input.upper()
+                    )
+                    balance_not_found_text = _(
+                        "promo_code_not_found_or_not_balance_credit", code=code_input.upper()
+                    )
+                    if result != bonus_not_found_text and result_discount == discount_not_found_text and result_balance == balance_not_found_text:
+                        response_to_user_text = result
+                    elif result_discount != discount_not_found_text and result_balance == balance_not_found_text:
+                        response_to_user_text = result_discount
+                    else:
+                        response_to_user_text = result_balance
+                    reply_markup = get_back_to_main_menu_markup(
+                        current_lang, i18n
+                    )
 
     await send_screen(
         message,

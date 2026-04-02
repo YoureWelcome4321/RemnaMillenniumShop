@@ -9,6 +9,7 @@ class AdminStates(StatesGroup):
     waiting_for_promo_type_selection = State()
     waiting_for_promo_code = State()
     waiting_for_promo_bonus_days = State()
+    waiting_for_promo_balance_credit_rub = State()
     waiting_for_promo_discount_percentage = State()
     waiting_for_promo_max_activations = State()
     waiting_for_promo_validity_days = State()

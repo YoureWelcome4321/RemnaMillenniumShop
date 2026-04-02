@@ -24,6 +24,9 @@ async def resolve_fiat_offer_price_for_user(
     promo_code_service=None,
 ) -> Optional[float]:
     """Resolve offer price server-side to prevent callback payload tampering."""
+    if sale_mode == "balance_topup":
+        return float(months) if float(months) > 0 else None
+
     price_source = (
         getattr(settings, "traffic_packages", {}) or {}
         if sale_mode == "traffic"

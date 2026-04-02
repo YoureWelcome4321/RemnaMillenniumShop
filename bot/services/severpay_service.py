@@ -16,7 +16,7 @@ from bot.services.subscription_service import SubscriptionService
 from bot.services.referral_service import ReferralService
 from bot.services.notification_service import NotificationService
 from bot.keyboards.inline.user_keyboards import get_connect_and_main_keyboard
-from db.dal import payment_dal, user_dal
+from db.dal import payment_dal, user_dal, referral_finance_dal
 from bot.utils.text_sanitizer import sanitize_display_name, username_for_display
 from bot.utils.config_link import prepare_config_links
 
@@ -288,7 +288,7 @@ class SeverPayService:
                         return web.json_response({"status": False, "msg": "currency_mismatch"}, status=400)
 
             payment_months = payment.subscription_duration_months or 1
-            sale_mode = "traffic" if self.settings.traffic_sale_mode else "subscription"
+            sale_mode = "balance_topup" if payment.description == "Balance top-up" else "traffic" if self.settings.traffic_sale_mode else "subscription"
             if status == "success":
                 try:
                     provider_id = provider_payment_id or str(payment.payment_id)
@@ -304,20 +304,34 @@ class SeverPayService:
                         )
                         return web.json_response({"status": True})
 
-                    activation = await self.subscription_service.activate_subscription(
-                        session,
-                        payment.user_id,
-                        int(payment_months) if sale_mode != "traffic" else 0,
-                        float(payment.amount),
-                        payment.payment_id,
-                        promo_code_id_from_payment=payment.promo_code_id,
-                        provider="severpay",
-                        sale_mode=sale_mode,
-                        traffic_gb=payment_months if sale_mode == "traffic" else None,
-                    )
+                    if sale_mode == "balance_topup":
+                        activation = None
+                        topup_tx = await referral_finance_dal.credit_balance_from_payment(
+                            session,
+                            payment.user_id,
+                            payment.payment_id,
+                            float(payment.amount),
+                            description="Balance top-up via SeverPay",
+                        )
+                        if not topup_tx:
+                            raise RuntimeError(
+                                f"SeverPay webhook: balance top-up failed for payment {payment.payment_id}"
+                            )
+                    else:
+                        activation = await self.subscription_service.activate_subscription(
+                            session,
+                            payment.user_id,
+                            int(payment_months) if sale_mode != "traffic" else 0,
+                            float(payment.amount),
+                            payment.payment_id,
+                            promo_code_id_from_payment=payment.promo_code_id,
+                            provider="severpay",
+                            sale_mode=sale_mode,
+                            traffic_gb=payment_months if sale_mode == "traffic" else None,
+                        )
 
                     referral_bonus = None
-                    if sale_mode != "traffic":
+                    if sale_mode not in {"traffic", "balance_topup"}:
                         referral_bonus = await self.referral_service.apply_referral_bonuses_for_payment(
                             session,
                             payment.user_id,
@@ -355,7 +369,12 @@ class SeverPayService:
 
                 traffic_label = str(int(payment_months)) if float(payment_months).is_integer() else f"{payment_months:g}"
 
-                if sale_mode == "traffic":
+                if sale_mode == "balance_topup":
+                    text = _(
+                        "balance_topup_successful",
+                        amount=f"{float(payment.amount):.2f}",
+                    )
+                elif sale_mode == "traffic":
                     text = _(
                         "payment_successful_traffic_full",
                         traffic_gb=traffic_label,
@@ -398,7 +417,7 @@ class SeverPayService:
                         config_link=config_link_text,
                     )
 
-                markup = get_connect_and_main_keyboard(
+                markup = None if sale_mode == "balance_topup" else get_connect_and_main_keyboard(
                     lang,
                     self.i18n,
                     self.settings,
@@ -423,7 +442,7 @@ class SeverPayService:
                         user_id=payment.user_id,
                         amount=float(payment.amount),
                         currency=payment.currency,
-                        months=int(payment_months) if sale_mode != "traffic" else 0,
+                        months=int(payment_months) if sale_mode not in {"traffic", "balance_topup"} else 0,
                         traffic_gb=payment_months if sale_mode == "traffic" else None,
                         payment_provider="severpay",
                         username=db_user.username if db_user else None,

@@ -52,6 +52,9 @@ async def get_promo_detail_text_and_keyboard(promo_id: int, session: AsyncSessio
     if promo_type == "discount":
         type_name = _("admin_promo_type_discount")
         value_line = _("admin_promo_card_discount_percentage", percentage=promo.discount_percentage)
+    elif promo_type == "balance_credit":
+        type_name = _("admin_promo_type_balance_credit")
+        value_line = _("admin_promo_card_balance_credit_rub", amount=f"{float(promo.balance_credit_rub or 0):.2f}")
     else:
         type_name = _("admin_promo_type_bonus_days")
         value_line = _("admin_promo_card_bonus_days", days=promo.bonus_days)
@@ -95,6 +98,8 @@ async def view_promo_codes_handler(callback: types.CallbackQuery, i18n_data: dic
             promo_type = getattr(p, "promo_type", "bonus_days")
             if promo_type == "discount":
                 value_display = f"💰 {p.discount_percentage}%"
+            elif promo_type == "balance_credit":
+                value_display = f"💳 {float(p.balance_credit_rub or 0):.2f}₽"
             else:
                 value_display = f"🎁 {p.bonus_days}д"
             validity_display = p.valid_until.strftime('%d.%m.%Y') if p.valid_until else _('admin_promo_valid_indefinitely')

@@ -18,7 +18,7 @@ from bot.services.subscription_service import SubscriptionService
 from bot.services.referral_service import ReferralService
 from bot.keyboards.inline.user_keyboards import get_connect_and_main_keyboard
 from bot.services.notification_service import NotificationService
-from db.dal import payment_dal, user_dal
+from db.dal import payment_dal, user_dal, referral_finance_dal
 from bot.utils.text_sanitizer import sanitize_display_name, username_for_display
 from bot.utils.config_link import prepare_config_links
 
@@ -365,26 +365,40 @@ class FreeKassaService:
                     return web.Response(text="YES")
 
                 months = payment.subscription_duration_months or 1
-                sale_mode = "traffic" if self.settings.traffic_sale_mode else "subscription"
+                sale_mode = "balance_topup" if payment.description == "Balance top-up" else "traffic" if self.settings.traffic_sale_mode else "subscription"
 
-                activation = await self.subscription_service.activate_subscription(
-                    session,
-                    payment.user_id,
-                    int(months) if sale_mode != "traffic" else 0,
-                    float(payment.amount),
-                    payment.payment_id,
-                    promo_code_id_from_payment=payment.promo_code_id,
-                    provider="freekassa",
-                    sale_mode=sale_mode,
-                    traffic_gb=months if sale_mode == "traffic" else None,
-                )
-                if not activation or not activation.get("end_date"):
-                    raise RuntimeError(
-                        f"FreeKassa webhook: activation failed for payment {payment.payment_id}"
+                if sale_mode == "balance_topup":
+                    activation = None
+                    topup_tx = await referral_finance_dal.credit_balance_from_payment(
+                        session,
+                        payment.user_id,
+                        payment.payment_id,
+                        float(payment.amount),
+                        description="Balance top-up via FreeKassa",
                     )
+                    if not topup_tx:
+                        raise RuntimeError(
+                            f"FreeKassa webhook: top-up failed for payment {payment.payment_id}"
+                        )
+                else:
+                    activation = await self.subscription_service.activate_subscription(
+                        session,
+                        payment.user_id,
+                        int(months) if sale_mode != "traffic" else 0,
+                        float(payment.amount),
+                        payment.payment_id,
+                        promo_code_id_from_payment=payment.promo_code_id,
+                        provider="freekassa",
+                        sale_mode=sale_mode,
+                        traffic_gb=months if sale_mode == "traffic" else None,
+                    )
+                    if not activation or not activation.get("end_date"):
+                        raise RuntimeError(
+                            f"FreeKassa webhook: activation failed for payment {payment.payment_id}"
+                        )
 
                 referral_bonus = None
-                if sale_mode != "traffic":
+                if sale_mode not in {"traffic", "balance_topup"}:
                     referral_bonus = await self.referral_service.apply_referral_bonuses_for_payment(
                         session,
                         payment.user_id,
@@ -431,7 +445,9 @@ class FreeKassaService:
 
             traffic_label = str(int(months)) if float(months).is_integer() else f"{months:g}"
 
-            if sale_mode == "traffic":
+            if sale_mode == "balance_topup":
+                text = _("balance_topup_successful", amount=f"{float(payment.amount):.2f}")
+            elif sale_mode == "traffic":
                 text = _("payment_successful_traffic_full",
                          traffic_gb=traffic_label,
                          end_date=end_date_str if final_end else "",
@@ -470,7 +486,7 @@ class FreeKassaService:
                 )
                 text = f"{order_info_text}\n{text}"
 
-            markup = get_connect_and_main_keyboard(
+            markup = None if sale_mode == "balance_topup" else get_connect_and_main_keyboard(
                 lang,
                 self.i18n,
                 self.settings,
@@ -495,7 +511,7 @@ class FreeKassaService:
                     user_id=payment.user_id,
                     amount=float(payment.amount),
                     currency=self.default_currency,
-                    months=int(months) if sale_mode != "traffic" else 0,
+                    months=int(months) if sale_mode not in {"traffic", "balance_topup"} else 0,
                     traffic_gb=months if sale_mode == "traffic" else None,
                     payment_provider="freekassa",
                     username=db_user.username if db_user else None,

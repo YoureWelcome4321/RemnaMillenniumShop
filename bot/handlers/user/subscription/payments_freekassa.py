@@ -104,6 +104,8 @@ async def pay_fk_callback_handler(
     payment_description = (
         get_text("payment_description_traffic", traffic_gb=human_value)
         if sale_mode == "traffic"
+        else "Balance top-up"
+        if sale_mode == "balance_topup"
         else get_text("payment_description_subscription", months=int(months))
     )
     currency_code = getattr(freekassa_service, "default_currency", None) or "RUB"
@@ -116,7 +118,7 @@ async def pay_fk_callback_handler(
         "currency": currency_code,
         "status": "pending_freekassa",
         "description": payment_description,
-        "subscription_duration_months": int(months),
+        "subscription_duration_months": int(months) if sale_mode != "balance_topup" else 0,
         "provider": "freekassa",
         "promo_code_id": None,
     }
@@ -187,15 +189,16 @@ async def pay_fk_callback_handler(
             try:
                 await callback.message.edit_text(
                     f"{order_info_text}\n\n" + get_text(
-                        key="payment_link_message_traffic" if sale_mode == "traffic" else "payment_link_message",
+                        key="payment_link_message_traffic" if sale_mode == "traffic" else "payment_link_message_balance_topup" if sale_mode == "balance_topup" else "payment_link_message",
                         months=int(months),
                         traffic_gb=human_value,
+                        amount=f"{price_rub:.2f}",
                     ),
                     reply_markup=get_payment_url_keyboard(
                         location,
                         current_lang,
                         i18n,
-                        back_callback=f"subscribe_period:{human_value}",
+                        back_callback="main_action:referral" if sale_mode == "balance_topup" else f"subscribe_period:{human_value}",
                         back_text_key="back_to_payment_methods_button",
                     ),
                     disable_web_page_preview=False,
@@ -205,15 +208,16 @@ async def pay_fk_callback_handler(
                 try:
                     await callback.message.answer(
                         f"{order_info_text}\n\n" + get_text(
-                            key="payment_link_message_traffic" if sale_mode == "traffic" else "payment_link_message",
+                            key="payment_link_message_traffic" if sale_mode == "traffic" else "payment_link_message_balance_topup" if sale_mode == "balance_topup" else "payment_link_message",
                             months=int(months),
                             traffic_gb=human_value,
+                            amount=f"{price_rub:.2f}",
                         ),
                         reply_markup=get_payment_url_keyboard(
                             location,
                             current_lang,
                             i18n,
-                            back_callback=f"subscribe_period:{human_value}",
+                            back_callback="main_action:referral" if sale_mode == "balance_topup" else f"subscribe_period:{human_value}",
                             back_text_key="back_to_payment_methods_button",
                         ),
                         disable_web_page_preview=False,

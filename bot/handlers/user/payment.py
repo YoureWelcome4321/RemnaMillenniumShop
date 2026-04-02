@@ -11,7 +11,7 @@ from sqlalchemy.orm import sessionmaker
 from yookassa.domain.notification import WebhookNotification
 from yookassa.domain.models.amount import Amount as YooKassaAmount
 
-from db.dal import payment_dal, user_dal, user_billing_dal
+from db.dal import payment_dal, user_dal, user_billing_dal, referral_finance_dal
 
 from bot.services.subscription_service import SubscriptionService
 from bot.services.referral_service import ReferralService
@@ -317,19 +317,33 @@ async def process_successful_payment(session: AsyncSession, bot: Bot,
         except Exception:
             logging.exception("Failed to persist YooKassa payment method from webhook")
 
+        activation_details = None
         months_for_activation = int(subscription_months) if sale_mode != "traffic" else 0
         try:
-            activation_details = await subscription_service.activate_subscription(
-                session,
-                user_id,
-                months_for_activation,
-                payment_value,
-                payment_db_id,
-                promo_code_id_from_payment=promo_code_id,
-                provider="yookassa",
-                sale_mode=sale_mode,
-                traffic_gb=traffic_amount_gb if sale_mode == "traffic" else None,
-            )
+            if sale_mode == "balance_topup":
+                topup_tx = await referral_finance_dal.credit_balance_from_payment(
+                    session,
+                    user_id,
+                    payment_db_id,
+                    payment_value,
+                    description="Balance top-up via YooKassa",
+                )
+                if not topup_tx:
+                    raise RuntimeError(
+                        f"Failed to top up balance for payment {payment_db_id}"
+                    )
+            else:
+                activation_details = await subscription_service.activate_subscription(
+                    session,
+                    user_id,
+                    months_for_activation,
+                    payment_value,
+                    payment_db_id,
+                    promo_code_id_from_payment=promo_code_id,
+                    provider="yookassa",
+                    sale_mode=sale_mode,
+                    traffic_gb=traffic_amount_gb if sale_mode == "traffic" else None,
+                )
         except Exception:
             previous_status = payment_before_update.status if payment_before_update else "pending_yookassa"
             await payment_dal.rollback_provider_payment_processing(
@@ -344,7 +358,7 @@ async def process_successful_payment(session: AsyncSession, bot: Bot,
             )
             return False
 
-        if not activation_details or not activation_details.get('end_date'):
+        if sale_mode != "balance_topup" and (not activation_details or not activation_details.get('end_date')):
             logging.error(
                 f"Failed to activate subscription for user {user_id} after payment {yk_payment_id_from_hook}"
             )
@@ -369,13 +383,13 @@ async def process_successful_payment(session: AsyncSession, bot: Bot,
             )
             return False
 
-        base_subscription_end_date = activation_details['end_date']
+        base_subscription_end_date = activation_details['end_date'] if activation_details else None
         final_end_date_for_user = base_subscription_end_date
         applied_promo_bonus_days = activation_details.get(
-            "applied_promo_bonus_days", 0)
+            "applied_promo_bonus_days", 0) if activation_details else 0
 
         referral_bonus_info = None
-        if sale_mode != "traffic":
+        if sale_mode not in {"traffic", "balance_topup"}:
             referral_bonus_info = await referral_service.apply_referral_bonuses_for_payment(
                 session,
                 user_id,
@@ -428,11 +442,17 @@ async def process_successful_payment(session: AsyncSession, bot: Bot,
         )
         config_link_text = config_link_display or _("config_link_not_available")
         # For auto-renew charges, avoid re-sending config link; send concise message
-        if sale_mode != "traffic" and is_auto_renew and final_end_date_for_user:
+        if sale_mode != "traffic" and sale_mode != "balance_topup" and is_auto_renew and final_end_date_for_user:
             details_message = _(
                 "yookassa_auto_renewal",
                 months=int(subscription_months),
                 end_date=final_end_date_for_user.strftime('%Y-%m-%d'),
+            )
+            details_markup = None
+        elif sale_mode == "balance_topup":
+            details_message = _(
+                "balance_topup_successful",
+                amount=f"{payment_value:.2f}",
             )
             details_markup = None
         elif sale_mode == "traffic":
@@ -522,7 +542,7 @@ async def process_successful_payment(session: AsyncSession, bot: Bot,
                 user_id=user_id,
                 amount=payment_value,
                 currency="RUB",
-                months=int(subscription_months) if sale_mode != "traffic" else 0,
+                months=int(subscription_months) if sale_mode not in {"traffic", "balance_topup"} else 0,
                 payment_provider="yookassa",  # This is specifically for YooKassa webhook
                 username=user.username if user else None,
                 traffic_gb=traffic_amount_gb if sale_mode == "traffic" else None,

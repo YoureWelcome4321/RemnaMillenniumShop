@@ -174,6 +174,8 @@ def get_payment_method_keyboard(months: int, price: float,
     value_str = _format_value(months)
     mode_suffix = f":{sale_mode}"
     for method in settings.payment_methods_order:
+        if sale_mode == "balance_topup" and method in {"stars", "cryptopay"}:
+            continue
         if method == "severpay" and getattr(settings, "SEVERPAY_ENABLED", False):
             builder.button(
                 text=_("pay_with_severpay_button"),
@@ -204,7 +206,7 @@ def get_payment_method_keyboard(months: int, price: float,
                 text=_("pay_with_cryptopay_button"),
                 callback_data=f"pay_crypto:{value_str}:{price}{mode_suffix}",
             )
-    if price is not None and float(price) > 0:
+    if sale_mode != "balance_topup" and price is not None and float(price) > 0:
         builder.button(
             text=_("pay_with_balance_button"),
             callback_data=f"pay_balance:{value_str}:{price}{mode_suffix}",
@@ -340,6 +342,8 @@ def get_referral_link_keyboard(lang: str,
     builder = InlineKeyboardBuilder()
     builder.button(text=_(key="referral_share_message_button"),
                    callback_data="referral_action:share_message")
+    builder.button(text=_(key="referral_topup_button"),
+                   callback_data="referral_action:topup")
     builder.button(text=_(key="referral_withdraw_button"),
                    callback_data="referral_action:withdraw")
     builder.button(text=_(key="back_to_main_menu_button"),

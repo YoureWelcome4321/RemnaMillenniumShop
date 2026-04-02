@@ -8,7 +8,7 @@ from config.settings import Settings
 from bot.services.referral_service import ReferralService
 from bot.states.user_states import UserReferralStates
 
-from bot.keyboards.inline.user_keyboards import get_back_to_main_menu_markup
+from bot.keyboards.inline.user_keyboards import get_back_to_main_menu_markup, get_payment_method_keyboard
 from bot.middlewares.i18n import JsonI18n
 from bot.utils.screen_media import send_screen
 from db.dal import referral_finance_dal
@@ -173,6 +173,12 @@ async def referral_action_handler(callback: types.CallbackQuery, settings: Setti
             _("referral_withdraw_prompt"),
             reply_markup=get_back_to_main_menu_markup(current_lang, i18n, callback_data="main_action:referral"),
         )
+    elif action == "topup":
+        await state.set_state(UserReferralStates.waiting_for_topup_amount)
+        await callback.message.answer(
+            _("referral_topup_prompt"),
+            reply_markup=get_back_to_main_menu_markup(current_lang, i18n, callback_data="main_action:referral"),
+        )
         
     await callback.answer()
 
@@ -214,3 +220,41 @@ async def process_withdraw_request(
     await session.commit()
     await state.clear()
     await message.answer(_("referral_withdraw_created", amount=amount_rub))
+
+
+@router.message(UserReferralStates.waiting_for_topup_amount, F.text)
+async def process_topup_amount(
+    message: types.Message,
+    state: FSMContext,
+    settings: Settings,
+    i18n_data: dict,
+):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
+
+    try:
+        amount_rub = round(float((message.text or "").strip().replace(",", ".")), 2)
+    except ValueError:
+        await message.answer(_("referral_topup_invalid_amount"))
+        return
+
+    if amount_rub <= 0:
+        await message.answer(_("referral_topup_invalid_amount"))
+        return
+
+    reply_markup = get_payment_method_keyboard(
+        amount_rub,
+        amount_rub,
+        None,
+        "RUB",
+        current_lang,
+        i18n,
+        settings,
+        sale_mode="balance_topup",
+    )
+    await state.clear()
+    await message.answer(
+        _("choose_payment_method_balance_topup", amount=f"{amount_rub:.2f}"),
+        reply_markup=reply_markup,
+    )

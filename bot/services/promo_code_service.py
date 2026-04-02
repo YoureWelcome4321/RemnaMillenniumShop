@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker
 
 from config.settings import Settings
 
-from db.dal import promo_code_dal, user_dal, active_discount_dal, payment_dal
+from db.dal import promo_code_dal, user_dal, active_discount_dal, payment_dal, referral_finance_dal
 
 from .subscription_service import SubscriptionService
 from bot.middlewares.i18n import JsonI18n
@@ -297,6 +297,46 @@ class PromoCodeService:
             f"{promo_data.discount_percentage}% off until {expires_at.isoformat()}"
         )
         return True, promo_data.discount_percentage
+
+    async def apply_balance_credit_promo_code(
+        self,
+        session: AsyncSession,
+        user_id: int,
+        code_input: str,
+        user_lang: str,
+    ) -> Tuple[bool, float | str]:
+        _ = lambda k, **kw: self.i18n.gettext(user_lang, k, **kw)
+        code_input_upper = code_input.strip().upper()
+
+        promo_data = await promo_code_dal.get_active_balance_credit_promo_code_by_code_str(
+            session, code_input_upper
+        )
+        if not promo_data:
+            return False, _("promo_code_not_found_or_not_balance_credit", code=code_input_upper)
+
+        existing_activation = await promo_code_dal.get_user_activation_for_promo(
+            session, promo_data.promo_code_id, user_id
+        )
+        if existing_activation:
+            return False, _("promo_code_already_used_by_user", code=code_input_upper)
+
+        amount_rub = float(promo_data.balance_credit_rub or 0.0)
+        if amount_rub <= 0:
+            return False, _("error_applying_promo_balance")
+
+        activation_recorded = await promo_code_dal.record_promo_activation(
+            session, promo_data.promo_code_id, user_id, payment_id=None
+        )
+        promo_incremented = await promo_code_dal.increment_promo_code_usage(
+            session, promo_data.promo_code_id
+        )
+        credited = await referral_finance_dal.credit_balance_from_promo(
+            session, user_id, amount_rub, code_input_upper
+        )
+        if activation_recorded and promo_incremented and credited:
+            return True, amount_rub
+
+        return False, _("error_applying_promo_balance")
 
     async def get_user_active_discount(
         self,

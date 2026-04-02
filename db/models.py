@@ -181,6 +181,8 @@ class PromoCode(Base):
 
     # For discount type: percentage discount (1-100)
     discount_percentage = Column(Integer, nullable=True)
+    # For balance_credit type: amount in RUB to credit user balance
+    balance_credit_rub = Column(Float, nullable=True)
 
     max_activations = Column(Integer, nullable=False)
     current_activations = Column(Integer, default=0)

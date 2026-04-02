@@ -64,6 +64,70 @@ async def add_user_balance(
     return user
 
 
+async def credit_balance_from_payment(
+    session: AsyncSession,
+    user_id: int,
+    payment_id: int,
+    amount_rub: float,
+    description: str = "Balance top-up",
+) -> Optional[BalanceTransaction]:
+    if amount_rub <= 0:
+        return None
+
+    existing = await get_balance_transaction_by_payment(
+        session,
+        payment_id,
+        "balance_topup",
+    )
+    if existing:
+        return existing
+
+    user = await session.get(User, user_id)
+    if not user:
+        return None
+
+    user.balance_rub = float(user.balance_rub or 0.0) + float(amount_rub)
+    tx = BalanceTransaction(
+        user_id=user_id,
+        amount_rub=float(amount_rub),
+        transaction_type="balance_topup",
+        status="completed",
+        description=description,
+        payment_id=payment_id,
+    )
+    session.add(tx)
+    await session.flush()
+    await session.refresh(tx)
+    return tx
+
+
+async def credit_balance_from_promo(
+    session: AsyncSession,
+    user_id: int,
+    amount_rub: float,
+    promo_code: str,
+) -> Optional[BalanceTransaction]:
+    if amount_rub <= 0:
+        return None
+
+    user = await session.get(User, user_id)
+    if not user:
+        return None
+
+    user.balance_rub = float(user.balance_rub or 0.0) + float(amount_rub)
+    tx = BalanceTransaction(
+        user_id=user_id,
+        amount_rub=float(amount_rub),
+        transaction_type="promo_balance_credit",
+        status="completed",
+        description=f"Promo code {promo_code}",
+    )
+    session.add(tx)
+    await session.flush()
+    await session.refresh(tx)
+    return tx
+
+
 async def add_referral_reward(
     session: AsyncSession,
     inviter_user_id: int,
