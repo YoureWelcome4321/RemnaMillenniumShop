@@ -54,6 +54,7 @@ class User(Base):
     withdrawal_requests = relationship(
         "WithdrawalRequest",
         back_populates="user",
+        foreign_keys="WithdrawalRequest.user_id",
         cascade="all, delete-orphan")
     balance_transactions = relationship(
         "BalanceTransaction",
@@ -291,6 +292,7 @@ class WithdrawalRequest(Base):
     processed_at = Column(DateTime(timezone=True), nullable=True)
 
     user = relationship("User", foreign_keys=[user_id], back_populates="withdrawal_requests")
+    processed_by_admin = relationship("User", foreign_keys=[admin_user_id])
 
 
 class BalanceTransaction(Base):
