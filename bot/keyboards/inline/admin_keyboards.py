@@ -134,6 +134,8 @@ def get_admin_referral_settings_keyboard(
     builder = InlineKeyboardBuilder()
     builder.button(text=_(key="admin_set_referral_percent_button"),
                    callback_data="admin_referral:set_percent_prompt")
+    builder.button(text=_(key="admin_set_referral_min_withdrawal_button"),
+                   callback_data="admin_referral:set_min_withdrawal_prompt")
     builder.button(text=_(key="admin_withdraw_requests_button"),
                    callback_data="admin_action:withdraw_requests")
     builder.button(text=_(key="back_to_system_functions_button"),

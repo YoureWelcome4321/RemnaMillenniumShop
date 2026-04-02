@@ -27,6 +27,12 @@ def get_main_menu_inline_keyboard(
             callback_data="main_action:my_subscription",
         )
     )
+    builder.row(
+        InlineKeyboardButton(
+            text=_(key="referral_topup_button"),
+            callback_data="main_action:topup_balance",
+        )
+    )
 
     if settings.REFERRAL_ENABLED:
         builder.row(
@@ -348,6 +354,28 @@ def get_referral_link_keyboard(lang: str,
                    callback_data="referral_action:withdraw")
     builder.button(text=_(key="back_to_main_menu_button"),
                    callback_data="main_action:back_to_main")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def get_referral_withdraw_type_keyboard(
+    lang: str,
+    i18n_instance,
+) -> InlineKeyboardMarkup:
+    _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text=_(key="referral_withdraw_type_crypto_button"),
+        callback_data="referral_action:withdraw_type:crypto",
+    )
+    builder.button(
+        text=_(key="referral_withdraw_type_card_button"),
+        callback_data="referral_action:withdraw_type:card",
+    )
+    builder.button(
+        text=_(key="back_to_main_menu_button"),
+        callback_data="main_action:referral",
+    )
     builder.adjust(1)
     return builder.as_markup()
 

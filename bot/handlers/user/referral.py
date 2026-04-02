@@ -8,7 +8,11 @@ from config.settings import Settings
 from bot.services.referral_service import ReferralService
 from bot.states.user_states import UserReferralStates
 
-from bot.keyboards.inline.user_keyboards import get_back_to_main_menu_markup, get_payment_method_keyboard
+from bot.keyboards.inline.user_keyboards import (
+    get_back_to_main_menu_markup,
+    get_payment_method_keyboard,
+    get_referral_withdraw_type_keyboard,
+)
 from bot.middlewares.i18n import JsonI18n
 from bot.utils.screen_media import send_screen
 from db.dal import referral_finance_dal
@@ -95,6 +99,7 @@ async def referral_command_handler(event: Union[types.Message,
         inviter_user_id,
         limit=5,
     )
+    min_withdrawal_rub = await referral_finance_dal.get_min_withdrawal_rub(session)
     history_lines = []
     for tx in recent_transactions:
         amount_sign = "+" if tx.amount_rub >= 0 else ""
@@ -112,6 +117,7 @@ async def referral_command_handler(event: Union[types.Message,
              balance_rub=referral_stats["balance_rub"],
              withdrawable_rub=withdrawable_balance,
              total_earned_rub=referral_stats["referral_total_earned_rub"],
+             min_withdrawal_rub=min_withdrawal_rub,
              balance_history=history_text,
              invited_count=referral_stats["invited_count"],
              purchased_count=referral_stats["purchased_count"])
@@ -173,10 +179,59 @@ async def referral_action_handler(callback: types.CallbackQuery, settings: Setti
             logging.error(f"Error in referral share message: {e}")
             await callback.answer("Произошла ошибка", show_alert=True)
     elif action == "withdraw":
-        await state.set_state(UserReferralStates.waiting_for_withdraw_request)
+        withdrawable_balance = await referral_finance_dal.get_withdrawable_referral_balance(
+            session,
+            callback.from_user.id,
+        )
+        min_withdrawal_rub = await referral_finance_dal.get_min_withdrawal_rub(session)
+        if withdrawable_balance <= 0 or withdrawable_balance + 1e-9 < min_withdrawal_rub:
+            await callback.message.answer(
+                _("referral_withdraw_insufficient_balance", min_withdrawal_rub=f"{min_withdrawal_rub:.2f}"),
+                reply_markup=get_back_to_main_menu_markup(current_lang, i18n, callback_data="main_action:referral"),
+            )
+            await callback.answer()
+            return
+
         await callback.message.answer(
-            _("referral_withdraw_prompt"),
-            reply_markup=get_back_to_main_menu_markup(current_lang, i18n, callback_data="main_action:referral"),
+            _(
+                "referral_withdraw_prompt",
+                amount_rub=f"{withdrawable_balance:.2f}",
+                min_withdrawal_rub=f"{min_withdrawal_rub:.2f}",
+            ),
+            reply_markup=get_referral_withdraw_type_keyboard(current_lang, i18n),
+        )
+    elif action == "withdraw_type":
+        withdraw_type = callback.data.split(":")[2]
+        withdrawable_balance = await referral_finance_dal.get_withdrawable_referral_balance(
+            session,
+            callback.from_user.id,
+        )
+        min_withdrawal_rub = await referral_finance_dal.get_min_withdrawal_rub(session)
+        if withdrawable_balance <= 0 or withdrawable_balance + 1e-9 < min_withdrawal_rub:
+            await callback.message.answer(
+                _("referral_withdraw_insufficient_balance", min_withdrawal_rub=f"{min_withdrawal_rub:.2f}"),
+                reply_markup=get_back_to_main_menu_markup(current_lang, i18n, callback_data="main_action:referral"),
+            )
+            await callback.answer()
+            return
+
+        payment_label = _("referral_withdraw_type_crypto_label") if withdraw_type == "crypto" else _("referral_withdraw_type_card_label")
+        request = await referral_finance_dal.create_withdrawal_request(
+            session,
+            callback.from_user.id,
+            round(withdrawable_balance, 2),
+            payment_label,
+        )
+        if not request:
+            await callback.message.answer(
+                _("referral_withdraw_insufficient_balance", min_withdrawal_rub=f"{min_withdrawal_rub:.2f}")
+            )
+            await callback.answer()
+            return
+
+        await session.commit()
+        await callback.message.answer(
+            _("referral_withdraw_created", amount=round(withdrawable_balance, 2), method=payment_label)
         )
     elif action == "topup":
         await state.set_state(UserReferralStates.waiting_for_topup_amount)
@@ -186,45 +241,6 @@ async def referral_action_handler(callback: types.CallbackQuery, settings: Setti
         )
         
     await callback.answer()
-
-
-@router.message(UserReferralStates.waiting_for_withdraw_request, F.text)
-async def process_withdraw_request(
-    message: types.Message,
-    state: FSMContext,
-    settings: Settings,
-    i18n_data: dict,
-    session: AsyncSession,
-):
-    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
-    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
-    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
-
-    raw_text = (message.text or "").strip()
-    amount_part, separator, details_part = raw_text.partition("\n")
-    if not amount_part or not details_part.strip():
-        await message.answer(_("referral_withdraw_invalid_format"))
-        return
-
-    try:
-        amount_rub = round(float(amount_part.replace(",", ".")), 2)
-    except ValueError:
-        await message.answer(_("referral_withdraw_invalid_format"))
-        return
-
-    request = await referral_finance_dal.create_withdrawal_request(
-        session,
-        message.from_user.id,
-        amount_rub,
-        details_part.strip(),
-    )
-    if not request:
-        await message.answer(_("referral_withdraw_insufficient_balance"))
-        return
-
-    await session.commit()
-    await state.clear()
-    await message.answer(_("referral_withdraw_created", amount=amount_rub))
 
 
 @router.message(UserReferralStates.waiting_for_topup_amount, F.text)

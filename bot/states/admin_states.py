@@ -40,3 +40,4 @@ class AdminStates(StatesGroup):
 
     # Referral finance
     waiting_for_referral_commission_percent = State()
+    waiting_for_referral_min_withdrawal = State()

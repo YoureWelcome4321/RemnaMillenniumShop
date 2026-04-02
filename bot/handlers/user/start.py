@@ -806,6 +806,12 @@ async def main_action_callback_handler(
     elif action == "apply_promo":
         await user_promo_handlers.prompt_promo_code_input(
             callback, state, i18n_data, settings, session)
+    elif action == "topup_balance":
+        await state.set_state(user_referral_handlers.UserReferralStates.waiting_for_topup_amount)
+        await callback.message.answer(
+            _("referral_topup_prompt"),
+            reply_markup=user_referral_handlers.get_back_to_main_menu_markup(current_lang, i18n),
+        )
     elif action == "request_trial":
         await user_trial_handlers.request_trial_confirmation_handler(
             callback, settings, i18n_data, subscription_service, session)

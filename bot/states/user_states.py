@@ -6,5 +6,4 @@ class UserPromoStates(StatesGroup):
 
 
 class UserReferralStates(StatesGroup):
-    waiting_for_withdraw_request = State()
     waiting_for_topup_amount = State()

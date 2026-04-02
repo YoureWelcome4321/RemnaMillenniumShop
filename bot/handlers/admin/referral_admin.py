@@ -29,9 +29,15 @@ async def referral_settings_panel(
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
 
     percent = await referral_finance_dal.get_referral_commission_percent(session)
+    min_withdrawal_rub = await referral_finance_dal.get_min_withdrawal_rub(session)
     pending_count = await referral_finance_dal.get_pending_withdrawal_count(session)
     await callback.message.edit_text(
-        _("admin_referral_settings_text", percent=percent, pending_count=pending_count),
+        _(
+            "admin_referral_settings_text",
+            percent=percent,
+            min_withdrawal_rub=f"{min_withdrawal_rub:.2f}",
+            pending_count=pending_count,
+        ),
         reply_markup=get_admin_referral_settings_keyboard(i18n, current_lang),
     )
     await callback.answer()
@@ -50,6 +56,22 @@ async def referral_percent_prompt(
 
     await state.set_state(AdminStates.waiting_for_referral_commission_percent)
     await callback.message.answer(_("admin_referral_set_percent_prompt"))
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin_referral:set_min_withdrawal_prompt")
+async def referral_min_withdrawal_prompt(
+    callback: types.CallbackQuery,
+    state: FSMContext,
+    settings: Settings,
+    i18n_data: dict,
+):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
+
+    await state.set_state(AdminStates.waiting_for_referral_min_withdrawal)
+    await callback.message.answer(_("admin_referral_set_min_withdrawal_prompt"))
     await callback.answer()
 
 
@@ -79,6 +101,34 @@ async def save_referral_percent(
     await session.commit()
     await state.clear()
     await message.answer(_("admin_referral_percent_saved", percent=percent))
+
+
+@router.message(AdminStates.waiting_for_referral_min_withdrawal, F.text)
+async def save_referral_min_withdrawal(
+    message: types.Message,
+    state: FSMContext,
+    settings: Settings,
+    i18n_data: dict,
+    session: AsyncSession,
+):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
+
+    try:
+        amount_rub = round(float((message.text or "").strip().replace(",", ".")), 2)
+    except ValueError:
+        await message.answer(_("admin_referral_min_withdrawal_invalid"))
+        return
+
+    if amount_rub < 0:
+        await message.answer(_("admin_referral_min_withdrawal_invalid"))
+        return
+
+    await referral_finance_dal.set_min_withdrawal_rub(session, amount_rub)
+    await session.commit()
+    await state.clear()
+    await message.answer(_("admin_referral_min_withdrawal_saved", amount_rub=f"{amount_rub:.2f}"))
 
 
 @router.callback_query(F.data == "admin_action:withdraw_requests")

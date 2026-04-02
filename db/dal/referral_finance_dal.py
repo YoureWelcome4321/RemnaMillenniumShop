@@ -13,7 +13,7 @@ async def get_or_create_referral_settings(session: AsyncSession) -> ReferralSett
     if settings:
         return settings
 
-    settings = ReferralSetting(id=1, commission_percent=0)
+    settings = ReferralSetting(id=1, commission_percent=0, min_withdrawal_rub=0.0)
     session.add(settings)
     await session.flush()
     await session.refresh(settings)
@@ -31,6 +31,23 @@ async def set_referral_commission_percent(
 ) -> ReferralSetting:
     settings = await get_or_create_referral_settings(session)
     settings.commission_percent = max(0, min(100, int(percent)))
+    settings.updated_at = datetime.now(timezone.utc)
+    await session.flush()
+    await session.refresh(settings)
+    return settings
+
+
+async def get_min_withdrawal_rub(session: AsyncSession) -> float:
+    settings = await get_or_create_referral_settings(session)
+    return max(0.0, round(float(settings.min_withdrawal_rub or 0.0), 2))
+
+
+async def set_min_withdrawal_rub(
+    session: AsyncSession,
+    amount_rub: float,
+) -> ReferralSetting:
+    settings = await get_or_create_referral_settings(session)
+    settings.min_withdrawal_rub = max(0.0, round(float(amount_rub), 2))
     settings.updated_at = datetime.now(timezone.utc)
     await session.flush()
     await session.refresh(settings)
@@ -209,6 +226,10 @@ async def create_withdrawal_request(
     payment_details: str,
 ) -> Optional[WithdrawalRequest]:
     if amount_rub <= 0:
+        return None
+
+    min_withdrawal_rub = await get_min_withdrawal_rub(session)
+    if float(amount_rub) + 1e-9 < min_withdrawal_rub:
         return None
 
     user = await session.get(User, user_id)

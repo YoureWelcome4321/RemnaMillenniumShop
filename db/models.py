@@ -277,6 +277,7 @@ class ReferralSetting(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=False, default=1)
     commission_percent = Column(Integer, nullable=False, default=0)
+    min_withdrawal_rub = Column(Float, nullable=False, default=0.0)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=True)
 
 
