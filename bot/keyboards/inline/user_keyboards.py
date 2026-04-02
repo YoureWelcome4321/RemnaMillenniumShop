@@ -348,8 +348,6 @@ def get_referral_link_keyboard(lang: str,
     builder = InlineKeyboardBuilder()
     builder.button(text=_(key="referral_share_message_button"),
                    callback_data="referral_action:share_message")
-    builder.button(text=_(key="referral_topup_button"),
-                   callback_data="referral_action:topup")
     builder.button(text=_(key="referral_withdraw_button"),
                    callback_data="referral_action:withdraw")
     builder.button(text=_(key="back_to_main_menu_button"),

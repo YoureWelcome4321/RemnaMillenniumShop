@@ -118,6 +118,8 @@
   "choose_payment_method_balance_topup": "Choose how to top up your balance by <b>{amount} RUB</b>:",
   "referral_withdraw_invalid_format": "Invalid withdrawal request format.",
   "referral_withdraw_insufficient_balance": "Insufficient funds for withdrawal. Only referral earnings can be withdrawn. Minimum withdrawal: <b>{min_withdrawal_rub} RUB</b>.",
+  "referral_withdraw_details_prompt": "Enter payout details for <b>{method}</b>.\n\nFor card: card number.\nFor crypto: wallet address.",
+  "referral_withdraw_details_invalid": "Enter a card number or wallet address.",
   "referral_withdraw_created": "✅ Withdrawal request created for <b>{amount:.2f} RUB</b> via <b>{method}</b>. An administrator will process it manually.",
   "referral_withdraw_type_crypto_button": "🪙 Crypto",
   "referral_withdraw_type_card_button": "💳 Card",

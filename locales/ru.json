@@ -119,6 +119,8 @@
   "choose_payment_method_balance_topup": "Выберите способ пополнения баланса на <b>{amount} RUB</b>:",
   "referral_withdraw_invalid_format": "Неверный формат заявки.",
   "referral_withdraw_insufficient_balance": "Недостаточно средств для вывода. Вывести можно только деньги, полученные по рефералам. Минимальная сумма вывода: <b>{min_withdrawal_rub} RUB</b>.",
+  "referral_withdraw_details_prompt": "Введите реквизиты для выплаты способом <b>{method}</b>.\n\nДля карты: номер карты.\nДля крипты: адрес кошелька.",
+  "referral_withdraw_details_invalid": "Введите номер карты или адрес кошелька.",
   "referral_withdraw_created": "✅ Заявка на вывод создана на сумму <b>{amount:.2f} RUB</b> способом <b>{method}</b>. Администратор обработает её вручную.",
   "referral_withdraw_type_crypto_button": "🪙 Крипта",
   "referral_withdraw_type_card_button": "💳 Карта",

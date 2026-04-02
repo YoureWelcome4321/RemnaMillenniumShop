@@ -215,23 +215,16 @@ async def referral_action_handler(callback: types.CallbackQuery, settings: Setti
             await callback.answer()
             return
 
-        payment_label = _("referral_withdraw_type_crypto_label") if withdraw_type == "crypto" else _("referral_withdraw_type_card_label")
-        request = await referral_finance_dal.create_withdrawal_request(
-            session,
-            callback.from_user.id,
-            round(withdrawable_balance, 2),
-            payment_label,
+        await state.set_state(UserReferralStates.waiting_for_withdraw_details)
+        await state.update_data(
+            withdraw_type=withdraw_type,
+            withdrawable_balance=round(withdrawable_balance, 2),
         )
-        if not request:
-            await callback.message.answer(
-                _("referral_withdraw_insufficient_balance", min_withdrawal_rub=f"{min_withdrawal_rub:.2f}")
-            )
-            await callback.answer()
-            return
-
-        await session.commit()
         await callback.message.answer(
-            _("referral_withdraw_created", amount=round(withdrawable_balance, 2), method=payment_label)
+            _("referral_withdraw_details_prompt", method=_(
+                "referral_withdraw_type_crypto_label" if withdraw_type == "crypto" else "referral_withdraw_type_card_label"
+            )),
+            reply_markup=get_back_to_main_menu_markup(current_lang, i18n, callback_data="main_action:referral"),
         )
     elif action == "topup":
         await state.set_state(UserReferralStates.waiting_for_topup_amount)
@@ -241,6 +234,51 @@ async def referral_action_handler(callback: types.CallbackQuery, settings: Setti
         )
         
     await callback.answer()
+
+
+@router.message(UserReferralStates.waiting_for_withdraw_details, F.text)
+async def process_withdraw_details(
+    message: types.Message,
+    state: FSMContext,
+    settings: Settings,
+    i18n_data: dict,
+    session: AsyncSession,
+):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
+
+    details = (message.text or "").strip()
+    if not details:
+        await message.answer(_("referral_withdraw_details_invalid"))
+        return
+
+    data = await state.get_data()
+    withdraw_type = data.get("withdraw_type")
+    amount_rub = round(float(data.get("withdrawable_balance") or 0.0), 2)
+    payment_label = _(
+        "referral_withdraw_type_crypto_label" if withdraw_type == "crypto" else "referral_withdraw_type_card_label"
+    )
+    payment_details = f"{payment_label}: {details}"
+
+    request = await referral_finance_dal.create_withdrawal_request(
+        session,
+        message.from_user.id,
+        amount_rub,
+        payment_details,
+    )
+    if not request:
+        min_withdrawal_rub = await referral_finance_dal.get_min_withdrawal_rub(session)
+        await message.answer(
+            _("referral_withdraw_insufficient_balance", min_withdrawal_rub=f"{min_withdrawal_rub:.2f}")
+        )
+        return
+
+    await session.commit()
+    await state.clear()
+    await message.answer(
+        _("referral_withdraw_created", amount=amount_rub, method=payment_label)
+    )
 
 
 @router.message(UserReferralStates.waiting_for_topup_amount, F.text)
