@@ -75,8 +75,16 @@ async def send_main_menu(target_event: Union[types.Message,
             )
 
     text = _(key="main_menu_greeting", user_name=user_full_name)
+    db_user = await user_dal.get_user_by_id(session, user_id)
+    balance_rub = float(getattr(db_user, "balance_rub", 0.0) or 0.0)
+    text = (
+        f"{text}\n\n"
+        f"<blockquote>{_('main_menu_balance_quote', balance_rub=balance_rub)}</blockquote>"
+    )
+    balance_button_text = _("menu_balance_button", balance_rub=balance_rub)
     reply_markup = get_main_menu_inline_keyboard(current_lang, i18n, settings,
-                                                 show_trial_button_in_menu)
+                                                 show_trial_button_in_menu,
+                                                 balance_button_text=balance_button_text)
 
     target_message_obj: Optional[types.Message] = None
     if isinstance(target_event, types.Message):

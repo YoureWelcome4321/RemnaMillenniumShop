@@ -9,7 +9,8 @@ def get_main_menu_inline_keyboard(
         lang: str,
         i18n_instance,
         settings: Settings,
-        show_trial_button: bool = False) -> InlineKeyboardMarkup:
+        show_trial_button: bool = False,
+        balance_button_text: Optional[str] = None) -> InlineKeyboardMarkup:
     _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
     builder = InlineKeyboardBuilder()
 
@@ -21,6 +22,13 @@ def get_main_menu_inline_keyboard(
     builder.row(
         InlineKeyboardButton(text=_(key="menu_subscribe_inline"),
                              callback_data="main_action:subscribe"))
+    if balance_button_text:
+        builder.row(
+            InlineKeyboardButton(
+                text=balance_button_text,
+                callback_data="main_action:referral",
+            )
+        )
     builder.row(
         InlineKeyboardButton(
             text=_(key="menu_my_subscription_inline"),
@@ -303,8 +311,6 @@ def get_referral_link_keyboard(lang: str,
     builder = InlineKeyboardBuilder()
     builder.button(text=_(key="referral_share_message_button"),
                    callback_data="referral_action:share_message")
-    builder.button(text=_(key="referral_buy_with_balance_button"),
-                   callback_data="main_action:subscribe")
     builder.button(text=_(key="referral_withdraw_button"),
                    callback_data="referral_action:withdraw")
     builder.button(text=_(key="back_to_main_menu_button"),
