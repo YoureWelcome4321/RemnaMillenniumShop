@@ -75,6 +75,11 @@ async def send_main_menu(target_event: Union[types.Message,
 
     db_user = await user_dal.get_user_by_id(session, user_id)
     balance_rub = float(getattr(db_user, "balance_rub", 0.0) or 0.0)
+    user_name = hd.quote(
+        sanitize_display_name(getattr(db_user, "first_name", None))
+        or target_event.from_user.full_name
+        or str(user_id)
+    )
     subscription_details = await subscription_service.get_active_subscription_details(
         session,
         user_id,
@@ -88,7 +93,7 @@ async def send_main_menu(target_event: Union[types.Message,
 
     text = _(
         "main_menu_user_info",
-        user_id=user_id,
+        user_name=user_name,
         balance_rub=balance_rub,
         subscription_status=subscription_status,
         subscription_end_date=subscription_end_date,

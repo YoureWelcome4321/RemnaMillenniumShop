@@ -6,7 +6,7 @@
   "channel_subscription_check_failed": "Couldn't verify the subscription. Please try again later or contact support.",
   "channel_subscription_verified_success": "✅ Subscription confirmed! You're good to go.",
   "main_menu_greeting": "Hi, {user_name}! 👋\nWhat would you like to do?",
-  "main_menu_user_info": "<b>User Info</b>\n\n🆔 ID: <code>{user_id}</code>\n💰 Balance: <b>{balance_rub:.2f} RUB</b>\n🔐 Subscription: <b>{subscription_status}</b>\n📅 Active until: <b>{subscription_end_date}</b>",
+  "main_menu_user_info": "👤 <b>{user_name}</b>\n💰 Balance: <b>{balance_rub:.2f} RUB</b>\n🔐 Subscription: <b>{subscription_status}</b>\n📅 Active until: <b>{subscription_end_date}</b>",
   "main_menu_subscription_active": "active",
   "main_menu_subscription_inactive": "inactive",
   "main_menu_subscription_no_end_date": "—",
