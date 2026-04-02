@@ -190,7 +190,7 @@ async def process_withdraw_request(
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
 
     raw_text = (message.text or "").strip()
-    amount_part, _, details_part = raw_text.partition("\n")
+    amount_part, separator, details_part = raw_text.partition("\n")
     if not amount_part or not details_part.strip():
         await message.answer(_("referral_withdraw_invalid_format"))
         return
