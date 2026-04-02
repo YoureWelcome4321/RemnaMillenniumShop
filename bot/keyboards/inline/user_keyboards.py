@@ -28,16 +28,20 @@ def get_main_menu_inline_keyboard(
         )
     )
 
-    promo_button = InlineKeyboardButton(
-        text=_(key="menu_apply_promo_button"),
-        callback_data="main_action:apply_promo")
     if settings.REFERRAL_ENABLED:
-        referral_button = InlineKeyboardButton(
-            text=_(key="menu_referral_inline"),
-            callback_data="main_action:referral")
-        builder.row(referral_button, promo_button)
-    else:
-        builder.row(promo_button)
+        builder.row(
+            InlineKeyboardButton(
+                text=_(key="menu_referral_inline"),
+                callback_data="main_action:referral",
+            )
+        )
+
+    builder.row(
+        InlineKeyboardButton(
+            text=_(key="menu_apply_promo_button"),
+            callback_data="main_action:apply_promo",
+        )
+    )
 
     status_button_list = []
     if settings.SERVER_STATUS_URL:
@@ -53,7 +57,8 @@ def get_main_menu_inline_keyboard(
     )
 
     if status_button_list:
-        builder.row(*status_button_list)
+        for button in status_button_list:
+            builder.row(button)
 
     return builder.as_markup()
 

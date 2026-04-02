@@ -205,7 +205,7 @@ async def pay_with_balance_callback_handler(
         return
 
     try:
-        _, months_raw, _price_raw, sale_mode = callback.data.split(":", 3)
+        action_prefix, months_raw, price_raw, sale_mode = callback.data.split(":", 3)
         months = float(months_raw)
     except ValueError:
         await callback.answer(_("error_try_again"), show_alert=True)

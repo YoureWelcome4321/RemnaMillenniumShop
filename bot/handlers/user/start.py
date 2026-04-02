@@ -41,8 +41,6 @@ async def send_main_menu(target_event: Union[types.Message,
     i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
 
     user_id = target_event.from_user.id
-    user_full_name = hd.quote(target_event.from_user.full_name)
-
     if not i18n:
         logging.error(
             f"i18n_instance missing in send_main_menu for user {user_id}")
@@ -75,12 +73,25 @@ async def send_main_menu(target_event: Union[types.Message,
                 "Method has_had_any_subscription is missing in SubscriptionService for send_main_menu!"
             )
 
-    text = _(key="main_menu_greeting", user_name=user_full_name)
     db_user = await user_dal.get_user_by_id(session, user_id)
     balance_rub = float(getattr(db_user, "balance_rub", 0.0) or 0.0)
-    text = (
-        f"{text}\n\n"
-        f"<blockquote>{_('main_menu_balance_quote', balance_rub=balance_rub)}</blockquote>"
+    subscription_details = await subscription_service.get_active_subscription_details(
+        session,
+        user_id,
+    )
+    if subscription_details and subscription_details.get("end_date"):
+        subscription_status = _("main_menu_subscription_active")
+        subscription_end_date = subscription_details["end_date"].strftime("%Y-%m-%d")
+    else:
+        subscription_status = _("main_menu_subscription_inactive")
+        subscription_end_date = _("main_menu_subscription_no_end_date")
+
+    text = _(
+        "main_menu_user_info",
+        user_id=user_id,
+        balance_rub=balance_rub,
+        subscription_status=subscription_status,
+        subscription_end_date=subscription_end_date,
     )
     reply_markup = get_main_menu_inline_keyboard(current_lang, i18n, settings,
                                                  show_trial_button_in_menu)
